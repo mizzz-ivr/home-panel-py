@@ -2,9 +2,10 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app import models  # noqa: F401
@@ -28,7 +29,12 @@ def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
 
 
-def render_dashboard(request: Request, db: Session, error_message: str | None = None) -> HTMLResponse:
+def render_dashboard(
+    request: Request,
+    db: Session,
+    error_message: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
     today = date.today()
     tasks = task_crud.list_tasks(db)
     memo = memo_crud.get_today_memo(db, today)
@@ -46,6 +52,7 @@ def render_dashboard(request: Request, db: Session, error_message: str | None = 
             "total_minutes": total_minutes,
             "error_message": error_message,
         },
+        status_code=status_code,
     )
 
 
@@ -66,7 +73,7 @@ def create_task(
 
     try:
         payload = TaskCreate(title=stripped)
-    except Exception:
+    except ValidationError:
         return render_dashboard(request, db, "タスク名が不正です。")
 
     task_crud.create_task(db, payload.title)
@@ -74,23 +81,27 @@ def create_task(
 
 
 @app.post("/tasks/{task_id}/toggle")
-def toggle_task(task_id: int, db: Session = Depends(get_db)):
+def toggle_task(request: Request, task_id: int, db: Session = Depends(get_db)):
     result = task_crud.toggle_task(db, task_id)
     if result is None:
-        return JSONResponse(
+        return render_dashboard(
+            request,
+            db,
+            "指定されたタスクが存在しません。",
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "指定されたタスクが存在しません。"},
         )
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/tasks/{task_id}/delete")
-def delete_task(task_id: int, db: Session = Depends(get_db)):
+def delete_task(request: Request, task_id: int, db: Session = Depends(get_db)):
     deleted = task_crud.delete_task(db, task_id)
     if not deleted:
-        return JSONResponse(
+        return render_dashboard(
+            request,
+            db,
+            "指定されたタスクが存在しません。",
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "指定されたタスクが存在しません。"},
         )
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -103,13 +114,15 @@ def get_today_memo(db: Session = Depends(get_db)):
 
 
 @app.post("/memo/today")
-def save_today_memo(content: str = Form(""), db: Session = Depends(get_db)):
+def save_today_memo(request: Request, content: str = Form(""), db: Session = Depends(get_db)):
     try:
         payload = DailyMemoUpdate(content=content)
-    except Exception:
-        return JSONResponse(
+    except ValidationError:
+        return render_dashboard(
+            request,
+            db,
+            "メモ内容は5000文字以内で入力してください。",
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"detail": "メモ内容が長すぎます。"},
         )
 
     memo_crud.upsert_today_memo(db, date.today(), payload.content)
@@ -119,13 +132,18 @@ def save_today_memo(content: str = Form(""), db: Session = Depends(get_db)):
 @app.post("/time-entries")
 def add_time_entry(
     request: Request,
-    minutes: int = Form(...),
+    minutes: str = Form(...),
     note: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
-        payload = TimeEntryCreate(minutes=minutes, note=note)
-    except Exception:
+        parsed_minutes = int(minutes)
+    except ValueError:
+        return render_dashboard(request, db, "時間は1〜1440分の整数で入力してください。")
+
+    try:
+        payload = TimeEntryCreate(minutes=parsed_minutes, note=note.strip())
+    except ValidationError:
         return render_dashboard(request, db, "時間は1〜1440分の整数で入力してください。")
 
     time_entry_crud.add_time_entry(db, date.today(), payload.minutes, payload.note)

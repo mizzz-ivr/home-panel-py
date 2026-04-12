@@ -94,6 +94,14 @@ def test_reject_invalid_minutes(client: TestClient):
     assert response.status_code == 200
     assert "時間は1〜1440分の整数で入力してください。" in response.text
 
+    response = client.post("/time-entries", data={"minutes": "abc", "note": ""})
+    assert response.status_code == 200
+    assert "時間は1〜1440分の整数で入力してください。" in response.text
+
+    response = client.post("/time-entries", data={"minutes": 10, "note": "a" * 256})
+    assert response.status_code == 200
+    assert "時間は1〜1440分の整数で入力してください。" in response.text
+
 
 def test_non_existing_task_operations(client: TestClient):
     toggle_response = client.post("/tasks/999/toggle")
@@ -101,5 +109,11 @@ def test_non_existing_task_operations(client: TestClient):
 
     assert toggle_response.status_code == 404
     assert delete_response.status_code == 404
-    assert toggle_response.json()["detail"] == "指定されたタスクが存在しません。"
-    assert delete_response.json()["detail"] == "指定されたタスクが存在しません。"
+    assert "指定されたタスクが存在しません。" in toggle_response.text
+    assert "指定されたタスクが存在しません。" in delete_response.text
+
+
+def test_reject_too_long_memo(client: TestClient):
+    response = client.post("/memo/today", data={"content": "x" * 5001})
+    assert response.status_code == 400
+    assert "メモ内容は5000文字以内で入力してください。" in response.text
