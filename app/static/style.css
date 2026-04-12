@@ -100,3 +100,9 @@ button.danger {
 .total {
   margin-top: 0;
 }
+
+.hint {
+  margin-top: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
