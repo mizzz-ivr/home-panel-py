@@ -41,6 +41,28 @@ def test_top_page(client: TestClient):
     assert "Home Panel" in response.text
 
 
+def test_dashboard_contains_swapy_layout(client: TestClient):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'data-swapy-container' in response.text
+    assert 'data-swapy-slot="slot-1"' in response.text
+    assert 'data-swapy-slot="slot-2"' in response.text
+    assert 'data-swapy-slot="slot-3"' in response.text
+    assert 'data-swapy-item="todo"' in response.text
+    assert 'data-swapy-item="memo"' in response.text
+    assert 'data-swapy-item="time"' in response.text
+    assert 'swapy@1.0.5/dist/swapy.min.js' in response.text
+
+
+def test_dashboard_javascript_is_served(client: TestClient):
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    assert "home-panel:dashboard-layout:v1" in response.text
+    assert "onSwapEnd" in response.text
+
+
 def test_add_task(client: TestClient):
     response = client.post("/tasks", data={"title": "買い物"}, follow_redirects=True)
     assert response.status_code == 200
