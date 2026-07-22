@@ -44,6 +44,11 @@ def test_top_page(client: TestClient):
     assert response.status_code == 200
     assert "Home Panel" in response.text
     assert 'href="/history"' in response.text
+    assert 'name="category"' in response.text
+    assert '<option value="学習"' in response.text
+    assert '<option value="作業"' in response.text
+    assert '<option value="個人開発"' in response.text
+    assert '<option value="その他"' in response.text
 
 
 def test_dashboard_contains_swapy_layout(client: TestClient):
@@ -96,14 +101,54 @@ def test_save_today_memo(client: TestClient):
     assert response.json()["content"] == "今日は設計を進めた"
 
 
-def test_add_time_entry_reflects_total(client: TestClient):
+def test_add_time_entry_reflects_total_and_category(client: TestClient):
     response = client.post(
         "/time-entries",
-        data={"minutes": 30, "note": "Python学習"},
+        data={"category": "学習", "minutes": 30, "note": "Python学習"},
         follow_redirects=True,
     )
+
     assert response.status_code == 200
     assert "当日合計: <strong>30</strong> 分" in response.text
+    assert "Python学習" in response.text
+
+    session_factory = client.app.state.testing_session_factory
+    with session_factory() as db:
+        entries = time_entry_crud.list_today_entries(db, date.today())
+        assert entries[0].category == "学習"
+
+
+def test_time_entry_defaults_to_work_category(client: TestClient):
+    response = client.post(
+        "/time-entries",
+        data={"minutes": 20, "note": "既存クライアント"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+
+    session_factory = client.app.state.testing_session_factory
+    with session_factory() as db:
+        entries = time_entry_crud.list_today_entries(db, date.today())
+        assert entries[0].category == "作業"
+
+
+def test_dashboard_displays_category_totals(client: TestClient):
+    client.post("/time-entries", data={"category": "学習", "minutes": 30, "note": "基礎"})
+    client.post("/time-entries", data={"category": "学習", "minutes": 15, "note": "復習"})
+    response = client.post(
+        "/time-entries",
+        data={"category": "個人開発", "minutes": 20, "note": "実装"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "カテゴリ別合計" in response.text
+
+    session_factory = client.app.state.testing_session_factory
+    with session_factory() as db:
+        totals = time_entry_crud.get_today_category_totals(db, date.today())
+        assert totals == [("学習", 45), ("個人開発", 20)]
 
 
 def test_history_displays_selected_date(client: TestClient):
@@ -112,8 +157,8 @@ def test_history_displays_selected_date(client: TestClient):
 
     with session_factory() as db:
         memo_crud.upsert_memo_by_date(db, target_date, "昨日はテストを追加した")
-        time_entry_crud.add_time_entry(db, target_date, 45, "履歴画面の確認")
-        time_entry_crud.add_time_entry(db, target_date, 15, "README更新")
+        time_entry_crud.add_time_entry(db, target_date, 45, "履歴画面の確認", category="学習")
+        time_entry_crud.add_time_entry(db, target_date, 15, "README更新", category="個人開発")
 
     response = client.get("/history", params={"target_date": target_date.isoformat()})
 
@@ -122,6 +167,9 @@ def test_history_displays_selected_date(client: TestClient):
     assert "昨日はテストを追加した" in response.text
     assert "履歴画面の確認" in response.text
     assert "README更新" in response.text
+    assert "カテゴリ別合計" in response.text
+    assert "学習" in response.text
+    assert "個人開発" in response.text
     assert "60分" in response.text
     assert "2件" in response.text
 
@@ -179,6 +227,7 @@ def test_history_empty_state(client: TestClient):
     assert response.status_code == 200
     assert "この日のメモはありません。" in response.text
     assert "この日の時間記録はありません。" in response.text
+    assert "この日のカテゴリ別集計はありません。" in response.text
 
 
 def test_reject_empty_task(client: TestClient):
@@ -203,6 +252,20 @@ def test_reject_invalid_minutes(client: TestClient):
     response = client.post("/time-entries", data={"minutes": 10, "note": "a" * 256})
     assert response.status_code == 200
     assert "時間は1〜1440分の整数で入力してください。" in response.text
+
+
+def test_reject_invalid_time_entry_category(client: TestClient):
+    response = client.post(
+        "/time-entries",
+        data={"category": "睡眠", "minutes": 30, "note": "不正カテゴリ"},
+    )
+
+    assert response.status_code == 400
+    assert "カテゴリは学習・作業・個人開発・その他から選択してください。" in response.text
+
+    session_factory = client.app.state.testing_session_factory
+    with session_factory() as db:
+        assert time_entry_crud.list_today_entries(db, date.today()) == []
 
 
 def test_non_existing_task_operations(client: TestClient):
