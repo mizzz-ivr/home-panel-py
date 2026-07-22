@@ -138,8 +138,19 @@ def test_history_defaults_to_today(client: TestClient):
     assert "25分" in response.text
 
 
-def test_history_rejects_invalid_date(client: TestClient):
-    response = client.get("/history", params={"target_date": "not-a-date"})
+@pytest.mark.parametrize(
+    "target_date",
+    [
+        "not-a-date",
+        "",
+        "20260721",
+        "2026-W30-2",
+        "2026-7-21",
+        "2026-02-30",
+    ],
+)
+def test_history_rejects_invalid_date(client: TestClient, target_date: str):
+    response = client.get("/history", params={"target_date": target_date})
 
     assert response.status_code == 400
     assert "日付はYYYY-MM-DD形式で指定してください。" in response.text
