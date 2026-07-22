@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>履歴 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>Home Panel</h1>
+          <p>メモと学習・作業時間の日別履歴</p>
+        </div>
+        <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+      </header>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      <section class="card history-controls" aria-labelledby="history-date-heading">
+        <div class="card-heading">
+          <h2 id="history-date-heading">表示する日付</h2>
+        </div>
+        <form action="/history" method="get" class="history-filter">
+          <label for="target-date">日付</label>
+          <div class="inline-form">
+            <input
+              id="target-date"
+              type="date"
+              name="target_date"
+              value="{{ selected_date.isoformat() }}"
+              max="{{ today.isoformat() }}"
+              required
+            />
+            <button type="submit">表示</button>
+          </div>
+        </form>
+        <nav class="history-navigation" aria-label="日付を移動">
+          <a href="/history?target_date={{ previous_date.isoformat() }}" class="button-link secondary-button">前の日</a>
+          {% if next_date %}
+          <a href="/history?target_date={{ next_date.isoformat() }}" class="button-link secondary-button">次の日</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">次の日</span>
+          {% endif %}
+        </nav>
+      </section>
+
+      <section class="history-summary" aria-label="選択日の概要">
+        <div class="card history-metric">
+          <span>選択日</span>
+          <strong>{{ selected_date.strftime('%Y年%m月%d日') }}</strong>
+        </div>
+        <div class="card history-metric">
+          <span>合計時間</span>
+          <strong>{{ total_minutes }}分</strong>
+        </div>
+        <div class="card history-metric">
+          <span>記録件数</span>
+          <strong>{{ entry_count }}件</strong>
+        </div>
+      </section>
+
+      <div class="history-grid">
+        <section class="card" aria-labelledby="history-memo-heading">
+          <div class="card-heading">
+            <h2 id="history-memo-heading">メモ</h2>
+          </div>
+          {% if memo_content %}
+          <p class="history-memo">{{ memo_content }}</p>
+          {% else %}
+          <p class="empty-state">この日のメモはありません。</p>
+          {% endif %}
+        </section>
+
+        <section class="card" aria-labelledby="history-time-heading">
+          <div class="card-heading">
+            <h2 id="history-time-heading">学習・作業時間</h2>
+          </div>
+          <ul class="list history-entry-list">
+            {% for entry in entries %}
+            <li class="history-entry">
+              <div>
+                <strong>{{ entry.minutes }}分</strong>
+                <span class="entry-category">{{ entry.category }}</span>
+              </div>
+              <p>{{ entry.note or 'メモなし' }}</p>
+            </li>
+            {% else %}
+            <li class="empty-state">この日の時間記録はありません。</li>
+            {% endfor %}
+          </ul>
+        </section>
+      </div>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
