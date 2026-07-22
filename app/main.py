@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request, status
@@ -56,9 +56,72 @@ def render_dashboard(
     )
 
 
+def render_history(
+    request: Request,
+    db: Session,
+    selected_date: date,
+    error_message: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    today = date.today()
+    memo = memo_crud.get_memo_by_date(db, selected_date)
+    entries = time_entry_crud.list_entries_by_date(db, selected_date)
+    total_minutes = time_entry_crud.get_total_minutes_by_date(db, selected_date)
+
+    return templates.TemplateResponse(
+        "history.html",
+        {
+            "request": request,
+            "today": today,
+            "selected_date": selected_date,
+            "previous_date": selected_date - timedelta(days=1),
+            "next_date": selected_date + timedelta(days=1) if selected_date < today else None,
+            "memo_content": memo.content if memo and memo.content.strip() else None,
+            "entries": entries,
+            "total_minutes": total_minutes,
+            "entry_count": len(entries),
+            "error_message": error_message,
+        },
+        status_code=status_code,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return render_dashboard(request, db)
+
+
+@app.get("/history", response_class=HTMLResponse)
+def history(
+    request: Request,
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    today = date.today()
+    selected_date = today
+
+    if target_date:
+        try:
+            selected_date = date.fromisoformat(target_date)
+        except ValueError:
+            return render_history(
+                request,
+                db,
+                today,
+                "日付はYYYY-MM-DD形式で指定してください。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if selected_date > today:
+            return render_history(
+                request,
+                db,
+                today,
+                "未来の日付は履歴として表示できません。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+    return render_history(request, db, selected_date)
 
 
 @app.post("/tasks")
