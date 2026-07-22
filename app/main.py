@@ -1,3 +1,4 @@
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from app.schemas.task import TaskCreate
 from app.schemas.time_entry import TimeEntryCreate
 
 BASE_DIR = Path(__file__).resolve().parent
+HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 
 app = FastAPI(title="Home Panel")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -86,6 +88,16 @@ def render_history(
     )
 
 
+def parse_history_date(value: str) -> date | None:
+    if not HISTORY_DATE_PATTERN.fullmatch(value):
+        return None
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return render_dashboard(request, db)
@@ -100,10 +112,9 @@ def history(
     today = date.today()
     selected_date = today
 
-    if target_date:
-        try:
-            selected_date = date.fromisoformat(target_date)
-        except ValueError:
+    if target_date is not None:
+        parsed_date = parse_history_date(target_date)
+        if parsed_date is None:
             return render_history(
                 request,
                 db,
@@ -112,6 +123,7 @@ def history(
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
+        selected_date = parsed_date
         if selected_date > today:
             return render_history(
                 request,
