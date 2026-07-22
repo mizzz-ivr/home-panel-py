@@ -106,14 +106,41 @@
               </button>
             </div>
             <p class="total">当日合計: <strong>{{ total_minutes }}</strong> 分</p>
+            {% if category_totals %}
+            <h3>カテゴリ別合計</h3>
+            <ul class="list history-entry-list" aria-label="当日のカテゴリ別合計">
+              {% for category, minutes in category_totals %}
+              <li class="history-entry">
+                <div>
+                  <span class="entry-category">{{ category }}</span>
+                  <strong>{{ minutes }}分</strong>
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
+            {% endif %}
             <form action="/time-entries" method="post" class="inline-form">
-              <input type="number" name="minutes" min="1" max="1440" placeholder="分" required />
-              <input type="text" name="note" maxlength="255" placeholder="メモ（任意）" />
+              <label for="time-category" class="sr-only">カテゴリ</label>
+              <select id="time-category" name="category" class="secondary-button" required>
+                {% for category in time_entry_categories %}
+                <option value="{{ category }}" {% if category == '作業' %}selected{% endif %}>{{ category }}</option>
+                {% endfor %}
+              </select>
+              <label for="time-minutes" class="sr-only">時間（分）</label>
+              <input id="time-minutes" type="number" name="minutes" min="1" max="1440" placeholder="分" required />
+              <label for="time-note" class="sr-only">メモ</label>
+              <input id="time-note" type="text" name="note" maxlength="255" placeholder="メモ（任意）" />
               <button type="submit">追加</button>
             </form>
-            <ul class="list">
+            <ul class="list history-entry-list">
               {% for entry in entries %}
-              <li>{{ entry.minutes }}分 - {{ entry.note or 'メモなし' }}</li>
+              <li class="history-entry">
+                <div>
+                  <strong>{{ entry.minutes }}分</strong>
+                  <span class="entry-category">{{ entry.category }}</span>
+                </div>
+                <p>{{ entry.note or 'メモなし' }}</p>
+              </li>
               {% else %}
               <li>まだ記録がありません。</li>
               {% endfor %}
