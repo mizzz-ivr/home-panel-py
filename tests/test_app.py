@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.crud import memo as memo_crud
+from app.crud import time_entry as time_entry_crud
 from app.db import Base, get_db
 from app.main import app
 
@@ -28,17 +30,20 @@ def client(tmp_path: Path):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.testing_session_factory = TestingSessionLocal
 
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
+    del app.state.testing_session_factory
 
 
 def test_top_page(client: TestClient):
     response = client.get("/")
     assert response.status_code == 200
     assert "Home Panel" in response.text
+    assert 'href="/history"' in response.text
 
 
 def test_dashboard_contains_swapy_layout(client: TestClient):
@@ -99,6 +104,70 @@ def test_add_time_entry_reflects_total(client: TestClient):
     )
     assert response.status_code == 200
     assert "当日合計: <strong>30</strong> 分" in response.text
+
+
+def test_history_displays_selected_date(client: TestClient):
+    target_date = date.today() - timedelta(days=1)
+    session_factory = client.app.state.testing_session_factory
+
+    with session_factory() as db:
+        memo_crud.upsert_memo_by_date(db, target_date, "昨日はテストを追加した")
+        time_entry_crud.add_time_entry(db, target_date, 45, "履歴画面の確認")
+        time_entry_crud.add_time_entry(db, target_date, 15, "README更新")
+
+    response = client.get("/history", params={"target_date": target_date.isoformat()})
+
+    assert response.status_code == 200
+    assert target_date.strftime("%Y年%m月%d日") in response.text
+    assert "昨日はテストを追加した" in response.text
+    assert "履歴画面の確認" in response.text
+    assert "README更新" in response.text
+    assert "60分" in response.text
+    assert "2件" in response.text
+
+
+def test_history_defaults_to_today(client: TestClient):
+    client.post("/memo/today", data={"content": "今日の履歴"})
+    client.post("/time-entries", data={"minutes": 25, "note": "確認"})
+
+    response = client.get("/history")
+
+    assert response.status_code == 200
+    assert date.today().strftime("%Y年%m月%d日") in response.text
+    assert "今日の履歴" in response.text
+    assert "25分" in response.text
+
+
+def test_history_rejects_invalid_date(client: TestClient):
+    response = client.get("/history", params={"target_date": "not-a-date"})
+
+    assert response.status_code == 400
+    assert "日付はYYYY-MM-DD形式で指定してください。" in response.text
+
+
+def test_history_rejects_future_date(client: TestClient):
+    future_date = date.today() + timedelta(days=1)
+    response = client.get("/history", params={"target_date": future_date.isoformat()})
+
+    assert response.status_code == 400
+    assert "未来の日付は履歴として表示できません。" in response.text
+
+
+def test_history_handles_minimum_date(client: TestClient):
+    response = client.get("/history", params={"target_date": date.min.isoformat()})
+
+    assert response.status_code == 200
+    assert "前の日" in response.text
+    assert 'aria-disabled="true"' in response.text
+
+
+def test_history_empty_state(client: TestClient):
+    target_date = date.today() - timedelta(days=30)
+    response = client.get("/history", params={"target_date": target_date.isoformat()})
+
+    assert response.status_code == 200
+    assert "この日のメモはありません。" in response.text
+    assert "この日の時間記録はありません。" in response.text
 
 
 def test_reject_empty_task(client: TestClient):
