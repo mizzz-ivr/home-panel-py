@@ -9,65 +9,119 @@
   <body>
     <main class="container">
       <header class="header card">
-        <h1>Home Panel</h1>
-        <p>今日の日付: {{ today.strftime('%Y-%m-%d') }}</p>
+        <div>
+          <h1>Home Panel</h1>
+          <p>今日の日付: {{ today.strftime('%Y-%m-%d') }}</p>
+        </div>
+        <button id="reset-layout" type="button" class="secondary-button">配置を初期化</button>
       </header>
 
       {% if error_message %}
       <section class="card error" role="alert">{{ error_message }}</section>
       {% endif %}
 
-      <section class="card">
-        <h2>ToDo</h2>
-        <form action="/tasks" method="post" class="inline-form">
-          <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
-          <button type="submit">追加</button>
-        </form>
-        <ul class="list">
-          {% for task in tasks %}
-          <li class="todo-item {% if task.is_done %}done{% endif %}">
-            <span>{{ task.title }}</span>
-            <div class="actions">
-              <form action="/tasks/{{ task.id }}/toggle" method="post">
-                <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
-              </form>
-              <form action="/tasks/{{ task.id }}/delete" method="post">
-                <button type="submit" class="danger">削除</button>
-              </form>
+      <p class="layout-hint" id="layout-help">
+        各カードの「並び替え」ハンドルをドラッグすると配置を変更できます。配置はこのブラウザに保存されます。
+      </p>
+
+      <div class="dashboard-grid" data-swapy-container aria-describedby="layout-help">
+        <div class="dashboard-slot" data-swapy-slot="slot-1">
+          <section class="card dashboard-card" data-swapy-item="todo">
+            <div class="card-heading">
+              <h2>ToDo</h2>
+              <button
+                type="button"
+                class="drag-handle"
+                data-swapy-handle
+                aria-label="ToDoカードを並び替え"
+                title="ドラッグして並び替え"
+              >
+                <span aria-hidden="true">⠿</span>
+                <span>並び替え</span>
+              </button>
             </div>
-          </li>
-          {% else %}
-          <li>タスクはまだありません。</li>
-          {% endfor %}
-        </ul>
-      </section>
+            <form action="/tasks" method="post" class="inline-form">
+              <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
+              <button type="submit">追加</button>
+            </form>
+            <ul class="list">
+              {% for task in tasks %}
+              <li class="todo-item {% if task.is_done %}done{% endif %}">
+                <span>{{ task.title }}</span>
+                <div class="actions">
+                  <form action="/tasks/{{ task.id }}/toggle" method="post">
+                    <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
+                  </form>
+                  <form action="/tasks/{{ task.id }}/delete" method="post">
+                    <button type="submit" class="danger">削除</button>
+                  </form>
+                </div>
+              </li>
+              {% else %}
+              <li>タスクはまだありません。</li>
+              {% endfor %}
+            </ul>
+          </section>
+        </div>
 
-      <section class="card">
-        <h2>今日のメモ</h2>
-        <form action="/memo/today" method="post">
-          <p class="hint">空で保存すると当日のメモをクリアできます。</p>
-          <textarea name="content" rows="6" placeholder="今日のメモを記録">{{ memo_content }}</textarea>
-          <button type="submit">保存</button>
-        </form>
-      </section>
+        <div class="dashboard-slot" data-swapy-slot="slot-2">
+          <section class="card dashboard-card" data-swapy-item="memo">
+            <div class="card-heading">
+              <h2>今日のメモ</h2>
+              <button
+                type="button"
+                class="drag-handle"
+                data-swapy-handle
+                aria-label="今日のメモカードを並び替え"
+                title="ドラッグして並び替え"
+              >
+                <span aria-hidden="true">⠿</span>
+                <span>並び替え</span>
+              </button>
+            </div>
+            <form action="/memo/today" method="post">
+              <p class="hint">空で保存すると当日のメモをクリアできます。</p>
+              <textarea name="content" rows="6" maxlength="5000" placeholder="今日のメモを記録">{{ memo_content }}</textarea>
+              <button type="submit">保存</button>
+            </form>
+          </section>
+        </div>
 
-      <section class="card">
-        <h2>学習/作業時間</h2>
-        <p class="total">当日合計: <strong>{{ total_minutes }}</strong> 分</p>
-        <form action="/time-entries" method="post" class="inline-form">
-          <input type="number" name="minutes" min="1" max="1440" placeholder="分" required />
-          <input type="text" name="note" maxlength="255" placeholder="メモ（任意）" />
-          <button type="submit">追加</button>
-        </form>
-        <ul class="list">
-          {% for entry in entries %}
-          <li>{{ entry.minutes }}分 - {{ entry.note or 'メモなし' }}</li>
-          {% else %}
-          <li>まだ記録がありません。</li>
-          {% endfor %}
-        </ul>
-      </section>
+        <div class="dashboard-slot" data-swapy-slot="slot-3">
+          <section class="card dashboard-card" data-swapy-item="time">
+            <div class="card-heading">
+              <h2>学習/作業時間</h2>
+              <button
+                type="button"
+                class="drag-handle"
+                data-swapy-handle
+                aria-label="学習・作業時間カードを並び替え"
+                title="ドラッグして並び替え"
+              >
+                <span aria-hidden="true">⠿</span>
+                <span>並び替え</span>
+              </button>
+            </div>
+            <p class="total">当日合計: <strong>{{ total_minutes }}</strong> 分</p>
+            <form action="/time-entries" method="post" class="inline-form">
+              <input type="number" name="minutes" min="1" max="1440" placeholder="分" required />
+              <input type="text" name="note" maxlength="255" placeholder="メモ（任意）" />
+              <button type="submit">追加</button>
+            </form>
+            <ul class="list">
+              {% for entry in entries %}
+              <li>{{ entry.minutes }}分 - {{ entry.note or 'メモなし' }}</li>
+              {% else %}
+              <li>まだ記録がありません。</li>
+              {% endfor %}
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <p id="layout-status" class="sr-only" aria-live="polite"></p>
     </main>
-    <script src="/static/app.js"></script>
+    <script src="https://unpkg.com/swapy@1.0.5/dist/swapy.min.js" defer></script>
+    <script src="/static/app.js" defer></script>
   </body>
 </html>
