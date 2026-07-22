@@ -153,6 +153,14 @@ def test_history_rejects_future_date(client: TestClient):
     assert "未来の日付は履歴として表示できません。" in response.text
 
 
+def test_history_handles_minimum_date(client: TestClient):
+    response = client.get("/history", params={"target_date": date.min.isoformat()})
+
+    assert response.status_code == 200
+    assert "前の日" in response.text
+    assert 'aria-disabled="true"' in response.text
+
+
 def test_history_empty_state(client: TestClient):
     target_date = date.today() - timedelta(days=30)
     response = client.get("/history", params={"target_date": target_date.isoformat()})
