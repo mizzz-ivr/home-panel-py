@@ -74,7 +74,7 @@ def render_history(
             "request": request,
             "today": today,
             "selected_date": selected_date,
-            "previous_date": selected_date - timedelta(days=1),
+            "previous_date": selected_date - timedelta(days=1) if selected_date > date.min else None,
             "next_date": selected_date + timedelta(days=1) if selected_date < today else None,
             "memo_content": memo.content if memo and memo.content.strip() else None,
             "entries": entries,
