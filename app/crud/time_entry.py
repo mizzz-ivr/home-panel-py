@@ -36,3 +36,18 @@ def get_total_minutes_by_date(db: Session, target_date: date) -> int:
 
 def get_today_total_minutes(db: Session, today: date) -> int:
     return get_total_minutes_by_date(db, today)
+
+
+def get_category_totals_by_date(db: Session, target_date: date) -> list[tuple[str, int]]:
+    total_minutes = func.sum(TimeEntry.minutes)
+    stmt = (
+        select(TimeEntry.category, total_minutes)
+        .where(TimeEntry.entry_date == target_date)
+        .group_by(TimeEntry.category)
+        .order_by(total_minutes.desc(), TimeEntry.category.asc())
+    )
+    return [(str(category), int(minutes)) for category, minutes in db.execute(stmt).all()]
+
+
+def get_today_category_totals(db: Session, today: date) -> list[tuple[str, int]]:
+    return get_category_totals_by_date(db, today)
