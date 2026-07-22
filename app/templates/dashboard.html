@@ -13,7 +13,10 @@
           <h1>Home Panel</h1>
           <p>今日の日付: {{ today.strftime('%Y-%m-%d') }}</p>
         </div>
-        <button id="reset-layout" type="button" class="secondary-button">配置を初期化</button>
+        <div class="header-actions">
+          <a href="/history" class="button-link secondary-button">履歴を見る</a>
+          <button id="reset-layout" type="button" class="secondary-button">配置を初期化</button>
+        </div>
       </header>
 
       {% if error_message %}
