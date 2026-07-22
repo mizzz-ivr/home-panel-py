@@ -39,7 +39,11 @@
           </div>
         </form>
         <nav class="history-navigation" aria-label="日付を移動">
+          {% if previous_date %}
           <a href="/history?target_date={{ previous_date.isoformat() }}" class="button-link secondary-button">前の日</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">前の日</span>
+          {% endif %}
           {% if next_date %}
           <a href="/history?target_date={{ next_date.isoformat() }}" class="button-link secondary-button">次の日</a>
           {% else %}
