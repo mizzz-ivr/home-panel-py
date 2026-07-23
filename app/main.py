@@ -20,6 +20,7 @@ from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 
 app = FastAPI(title="Home Panel")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -93,6 +94,75 @@ def render_history(
     )
 
 
+def get_week_start(target_date: date) -> date:
+    return target_date - timedelta(days=target_date.weekday())
+
+
+def render_weekly(
+    request: Request,
+    db: Session,
+    selected_date: date,
+    error_message: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    today = date.today()
+    week_start = get_week_start(selected_date)
+    week_end = week_start + timedelta(days=6)
+    effective_end = min(week_end, today)
+    current_week_start = get_week_start(today)
+
+    total_minutes, entry_count = time_entry_crud.get_range_summary(db, week_start, effective_end)
+    category_totals = time_entry_crud.get_category_totals_between(db, week_start, effective_end)
+    daily_totals = dict(time_entry_crud.get_daily_totals_between(db, week_start, effective_end))
+    max_daily_minutes = max(daily_totals.values(), default=0)
+
+    daily_summaries = []
+    for offset in range(7):
+        target_date = week_start + timedelta(days=offset)
+        minutes = daily_totals.get(target_date, 0)
+        daily_summaries.append(
+            {
+                "date": target_date,
+                "weekday": WEEKDAY_LABELS[target_date.weekday()],
+                "minutes": minutes,
+                "is_future": target_date > today,
+                "percentage": round(minutes / max_daily_minutes * 100) if max_daily_minutes else 0,
+            }
+        )
+
+    previous_week_start = (
+        week_start - timedelta(days=7)
+        if week_start >= date.min + timedelta(days=7)
+        else None
+    )
+    next_week_start = (
+        week_start + timedelta(days=7)
+        if week_start < current_week_start
+        else None
+    )
+
+    return templates.TemplateResponse(
+        "weekly.html",
+        {
+            "request": request,
+            "today": today,
+            "selected_date": selected_date,
+            "week_start": week_start,
+            "week_end": week_end,
+            "effective_end": effective_end,
+            "previous_week_start": previous_week_start,
+            "next_week_start": next_week_start,
+            "total_minutes": total_minutes,
+            "entry_count": entry_count,
+            "active_days": sum(1 for summary in daily_summaries if summary["minutes"] > 0),
+            "category_totals": category_totals,
+            "daily_summaries": daily_summaries,
+            "error_message": error_message,
+        },
+        status_code=status_code,
+    )
+
+
 def parse_history_date(value: str) -> date | None:
     if not HISTORY_DATE_PATTERN.fullmatch(value):
         return None
@@ -139,6 +209,39 @@ def history(
             )
 
     return render_history(request, db, selected_date)
+
+
+@app.get("/weekly", response_class=HTMLResponse)
+def weekly(
+    request: Request,
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    today = date.today()
+    selected_date = today
+
+    if target_date is not None:
+        parsed_date = parse_history_date(target_date)
+        if parsed_date is None:
+            return render_weekly(
+                request,
+                db,
+                today,
+                "日付はYYYY-MM-DD形式で指定してください。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        selected_date = parsed_date
+        if selected_date > today:
+            return render_weekly(
+                request,
+                db,
+                today,
+                "未来の日付は週次集計の基準日に指定できません。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+    return render_weekly(request, db, selected_date)
 
 
 @app.post("/tasks")
