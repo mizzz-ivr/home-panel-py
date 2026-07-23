@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>月次集計 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/monthly.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>Home Panel</h1>
+          <p>学習・作業時間の月次集計</p>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+          <a href="/history" class="button-link secondary-button">日別履歴</a>
+          <a href="/weekly" class="button-link secondary-button">週次集計</a>
+        </div>
+      </header>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      <section class="card history-controls" aria-labelledby="monthly-date-heading">
+        <div class="card-heading">
+          <h2 id="monthly-date-heading">表示する月</h2>
+        </div>
+        <form action="/monthly" method="get" class="history-filter">
+          <label for="target-month">月</label>
+          <div class="inline-form">
+            <input
+              id="target-month"
+              type="month"
+              name="target_month"
+              value="{{ month_start.strftime('%Y-%m') }}"
+              max="{{ today.strftime('%Y-%m') }}"
+              required
+            />
+            <button type="submit">表示</button>
+          </div>
+        </form>
+        <nav class="history-navigation" aria-label="月を移動">
+          {% if previous_month_start %}
+          <a href="/monthly?target_month={{ previous_month_start.strftime('%Y-%m') }}" class="button-link secondary-button">前の月</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">前の月</span>
+          {% endif %}
+          {% if next_month_start %}
+          <a href="/monthly?target_month={{ next_month_start.strftime('%Y-%m') }}" class="button-link secondary-button">次の月</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">次の月</span>
+          {% endif %}
+        </nav>
+      </section>
+
+      <section class="monthly-summary" aria-label="選択月の概要">
+        <div class="card history-metric">
+          <span>対象月</span>
+          <strong>{{ month_start.strftime('%Y年%m月') }}</strong>
+          {% if effective_end < month_end %}
+          <small>集計は{{ effective_end.strftime('%m月%d日') }}まで</small>
+          {% endif %}
+        </div>
+        <div class="card history-metric">
+          <span>合計時間</span>
+          <strong>{{ total_minutes }}分</strong>
+        </div>
+        <div class="card history-metric">
+          <span>記録件数</span>
+          <strong>{{ entry_count }}件</strong>
+        </div>
+        <div class="card history-metric">
+          <span>記録日平均</span>
+          <strong>{{ average_minutes }}分</strong>
+          <small>{{ active_days }}日間の平均</small>
+        </div>
+      </section>
+
+      <div class="monthly-grid">
+        <section class="card" aria-labelledby="monthly-category-heading">
+          <div class="card-heading">
+            <h2 id="monthly-category-heading">カテゴリ別合計</h2>
+          </div>
+          <ul class="list history-entry-list">
+            {% for category, minutes in category_totals %}
+            <li class="history-entry">
+              <div>
+                <span class="entry-category">{{ category }}</span>
+                <strong>{{ minutes }}分</strong>
+              </div>
+            </li>
+            {% else %}
+            <li class="empty-state">この月のカテゴリ別集計はありません。</li>
+            {% endfor %}
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="monthly-daily-heading">
+          <div class="card-heading">
+            <h2 id="monthly-daily-heading">日別推移</h2>
+          </div>
+          <div class="monthly-calendar" role="grid" aria-label="{{ month_start.strftime('%Y年%m月') }}の日別集計">
+            {% for label in weekday_labels %}
+            <div class="monthly-weekday" role="columnheader">{{ label }}</div>
+            {% endfor %}
+            {% for _ in range(leading_blank_days) %}
+            <div class="monthly-day-spacer" aria-hidden="true"></div>
+            {% endfor %}
+            {% for summary in daily_summaries %}
+            <article
+              class="monthly-day {% if summary.is_future %}future{% endif %} {% if summary.is_today %}today{% endif %}"
+              role="gridcell"
+              aria-label="{{ summary.date.strftime('%Y年%m月%d日') }} {% if summary.is_future %}未到来{% else %}{{ summary.minutes }}分{% endif %}"
+            >
+              <div class="monthly-day-header">
+                {% if summary.is_future %}
+                <strong>{{ summary.date.day }}</strong>
+                <span class="entry-category">未到来</span>
+                {% else %}
+                <a href="/history?target_date={{ summary.date.isoformat() }}">{{ summary.date.day }}</a>
+                <strong>{{ summary.minutes }}分</strong>
+                {% endif %}
+              </div>
+              {% if not summary.is_future %}
+              <div class="weekly-bar-track" aria-hidden="true">
+                <span class="weekly-bar" style="--bar-width: {{ summary.percentage }}%"></span>
+              </div>
+              {% if summary.minutes == 0 %}
+              <span class="entry-category">記録なし</span>
+              {% endif %}
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

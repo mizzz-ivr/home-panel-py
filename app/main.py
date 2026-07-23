@@ -20,6 +20,7 @@ from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+MONTH_PATTERN = re.compile(r"\d{4}-\d{2}\Z")
 WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 
 app = FastAPI(title="Home Panel")
@@ -163,12 +164,109 @@ def render_weekly(
     )
 
 
+def get_month_start(target_date: date) -> date:
+    return target_date.replace(day=1)
+
+
+def get_next_month_start(month_start: date) -> date:
+    if month_start.month == 12:
+        return date(month_start.year + 1, 1, 1)
+    return date(month_start.year, month_start.month + 1, 1)
+
+
+def get_previous_month_start(month_start: date) -> date | None:
+    if month_start == date.min:
+        return None
+    if month_start.month == 1:
+        return date(month_start.year - 1, 12, 1)
+    return date(month_start.year, month_start.month - 1, 1)
+
+
+def get_month_end(month_start: date) -> date:
+    return get_next_month_start(month_start) - timedelta(days=1)
+
+
+def render_monthly(
+    request: Request,
+    db: Session,
+    selected_month: date,
+    error_message: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    today = date.today()
+    month_start = get_month_start(selected_month)
+    month_end = get_month_end(month_start)
+    effective_end = min(month_end, today)
+    current_month_start = get_month_start(today)
+
+    total_minutes, entry_count = time_entry_crud.get_range_summary(db, month_start, effective_end)
+    category_totals = time_entry_crud.get_category_totals_between(db, month_start, effective_end)
+    daily_totals = dict(time_entry_crud.get_daily_totals_between(db, month_start, effective_end))
+    max_daily_minutes = max(daily_totals.values(), default=0)
+
+    daily_summaries = []
+    days_in_month = (month_end - month_start).days + 1
+    for offset in range(days_in_month):
+        target_date = month_start + timedelta(days=offset)
+        minutes = daily_totals.get(target_date, 0)
+        daily_summaries.append(
+            {
+                "date": target_date,
+                "minutes": minutes,
+                "is_future": target_date > today,
+                "is_today": target_date == today,
+                "percentage": round(minutes / max_daily_minutes * 100) if max_daily_minutes else 0,
+            }
+        )
+
+    active_days = sum(1 for summary in daily_summaries if summary["minutes"] > 0)
+    previous_month_start = get_previous_month_start(month_start)
+    next_month_start = (
+        get_next_month_start(month_start)
+        if month_start < current_month_start
+        else None
+    )
+
+    return templates.TemplateResponse(
+        "monthly.html",
+        {
+            "request": request,
+            "today": today,
+            "month_start": month_start,
+            "month_end": month_end,
+            "effective_end": effective_end,
+            "previous_month_start": previous_month_start,
+            "next_month_start": next_month_start,
+            "total_minutes": total_minutes,
+            "entry_count": entry_count,
+            "active_days": active_days,
+            "average_minutes": round(total_minutes / active_days) if active_days else 0,
+            "category_totals": category_totals,
+            "daily_summaries": daily_summaries,
+            "leading_blank_days": month_start.weekday(),
+            "weekday_labels": WEEKDAY_LABELS,
+            "error_message": error_message,
+        },
+        status_code=status_code,
+    )
+
+
 def parse_history_date(value: str) -> date | None:
     if not HISTORY_DATE_PATTERN.fullmatch(value):
         return None
 
     try:
         return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def parse_month(value: str) -> date | None:
+    if not MONTH_PATTERN.fullmatch(value):
+        return None
+
+    try:
+        return date.fromisoformat(f"{value}-01")
     except ValueError:
         return None
 
@@ -242,6 +340,40 @@ def weekly(
             )
 
     return render_weekly(request, db, selected_date)
+
+
+@app.get("/monthly", response_class=HTMLResponse)
+def monthly(
+    request: Request,
+    target_month: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    today = date.today()
+    current_month_start = get_month_start(today)
+    selected_month = current_month_start
+
+    if target_month is not None:
+        parsed_month = parse_month(target_month)
+        if parsed_month is None:
+            return render_monthly(
+                request,
+                db,
+                current_month_start,
+                "月はYYYY-MM形式で指定してください。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        selected_month = parsed_month
+        if selected_month > current_month_start:
+            return render_monthly(
+                request,
+                db,
+                current_month_start,
+                "未来の月は月次集計に指定できません。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+    return render_monthly(request, db, selected_month)
 
 
 @app.post("/tasks")
