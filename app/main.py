@@ -16,7 +16,7 @@ from app.crud import time_entry as time_entry_crud
 from app.db import Base, engine, get_db
 from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
-from app.schemas.time_entry import TimeEntryCreate
+from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -42,6 +42,7 @@ def render_dashboard(
     memo = memo_crud.get_today_memo(db, today)
     entries = time_entry_crud.list_today_entries(db, today)
     total_minutes = time_entry_crud.get_today_total_minutes(db, today)
+    category_totals = time_entry_crud.get_today_category_totals(db, today)
 
     return templates.TemplateResponse(
         "dashboard.html",
@@ -52,6 +53,8 @@ def render_dashboard(
             "memo_content": memo.content if memo else "",
             "entries": entries,
             "total_minutes": total_minutes,
+            "category_totals": category_totals,
+            "time_entry_categories": TIME_ENTRY_CATEGORIES,
             "error_message": error_message,
         },
         status_code=status_code,
@@ -69,6 +72,7 @@ def render_history(
     memo = memo_crud.get_memo_by_date(db, selected_date)
     entries = time_entry_crud.list_entries_by_date(db, selected_date)
     total_minutes = time_entry_crud.get_total_minutes_by_date(db, selected_date)
+    category_totals = time_entry_crud.get_category_totals_by_date(db, selected_date)
 
     return templates.TemplateResponse(
         "history.html",
@@ -81,6 +85,7 @@ def render_history(
             "memo_content": memo.content if memo and memo.content.strip() else None,
             "entries": entries,
             "total_minutes": total_minutes,
+            "category_totals": category_totals,
             "entry_count": len(entries),
             "error_message": error_message,
         },
@@ -209,17 +214,32 @@ def add_time_entry(
     request: Request,
     minutes: str = Form(...),
     note: str = Form(""),
+    category: str = Form("作業"),
     db: Session = Depends(get_db),
 ):
+    if category not in TIME_ENTRY_CATEGORIES:
+        return render_dashboard(
+            request,
+            db,
+            "カテゴリは学習・作業・個人開発・その他から選択してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         parsed_minutes = int(minutes)
     except ValueError:
         return render_dashboard(request, db, "時間は1〜1440分の整数で入力してください。")
 
     try:
-        payload = TimeEntryCreate(minutes=parsed_minutes, note=note.strip())
+        payload = TimeEntryCreate(category=category, minutes=parsed_minutes, note=note.strip())
     except ValidationError:
         return render_dashboard(request, db, "時間は1〜1440分の整数で入力してください。")
 
-    time_entry_crud.add_time_entry(db, date.today(), payload.minutes, payload.note)
+    time_entry_crud.add_time_entry(
+        db,
+        date.today(),
+        payload.minutes,
+        payload.note,
+        category=payload.category.value,
+    )
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)

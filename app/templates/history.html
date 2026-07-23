@@ -67,6 +67,24 @@
         </div>
       </section>
 
+      <section class="card" aria-labelledby="history-category-heading">
+        <div class="card-heading">
+          <h2 id="history-category-heading">カテゴリ別合計</h2>
+        </div>
+        <ul class="list history-entry-list">
+          {% for category, minutes in category_totals %}
+          <li class="history-entry">
+            <div>
+              <span class="entry-category">{{ category }}</span>
+              <strong>{{ minutes }}分</strong>
+            </div>
+          </li>
+          {% else %}
+          <li class="empty-state">この日のカテゴリ別集計はありません。</li>
+          {% endfor %}
+        </ul>
+      </section>
+
       <div class="history-grid">
         <section class="card" aria-labelledby="history-memo-heading">
           <div class="card-heading">
