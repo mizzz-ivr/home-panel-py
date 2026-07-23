@@ -117,13 +117,15 @@ body {
 
 input,
 textarea,
+select,
 button,
 .button-link {
   font: inherit;
 }
 
 input,
-textarea {
+textarea,
+select {
   min-width: 0;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -139,7 +141,8 @@ input[type="number"] {
   flex: 0 1 100px;
 }
 
-input[type="date"] {
+input[type="date"],
+select {
   flex: 0 1 180px;
 }
 
@@ -173,6 +176,7 @@ button:hover,
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 .button-link:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.3);
   outline-offset: 2px;
@@ -265,10 +269,15 @@ button.danger {
   flex-wrap: wrap;
 }
 
-.history-summary {
+.history-summary,
+.weekly-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+.weekly-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .history-metric {
@@ -276,7 +285,8 @@ button.danger {
   gap: 6px;
 }
 
-.history-metric span {
+.history-metric span,
+.history-metric small {
   color: #64748b;
   font-size: 13px;
 }
@@ -285,7 +295,8 @@ button.danger {
   font-size: 20px;
 }
 
-.history-grid {
+.history-grid,
+.weekly-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
@@ -335,6 +346,64 @@ button.danger {
   font-size: 13px;
 }
 
+.weekly-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.weekly-day {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.weekly-day:first-child {
+  padding-top: 0;
+}
+
+.weekly-day:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.weekly-day.future {
+  opacity: 0.65;
+}
+
+.weekly-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.weekly-day-header a {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.weekly-day-header a:hover {
+  text-decoration: underline;
+}
+
+.weekly-bar-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.weekly-bar {
+  display: block;
+  width: var(--bar-width);
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
 .empty-state {
   margin: 0;
   color: #64748b;
@@ -372,7 +441,9 @@ button.danger {
 
   .dashboard-grid,
   .history-summary,
-  .history-grid {
+  .weekly-summary,
+  .history-grid,
+  .weekly-grid {
     grid-template-columns: 1fr;
   }
 

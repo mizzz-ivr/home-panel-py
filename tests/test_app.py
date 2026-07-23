@@ -44,6 +44,7 @@ def test_top_page(client: TestClient):
     assert response.status_code == 200
     assert "Home Panel" in response.text
     assert 'href="/history"' in response.text
+    assert 'href="/weekly"' in response.text
     assert 'name="category"' in response.text
     assert '<option value="学習"' in response.text
     assert '<option value="作業"' in response.text
@@ -172,6 +173,7 @@ def test_history_displays_selected_date(client: TestClient):
     assert "個人開発" in response.text
     assert "60分" in response.text
     assert "2件" in response.text
+    assert 'href="/weekly"' in response.text
 
 
 def test_history_defaults_to_today(client: TestClient):
@@ -228,6 +230,122 @@ def test_history_empty_state(client: TestClient):
     assert "この日のメモはありません。" in response.text
     assert "この日の時間記録はありません。" in response.text
     assert "この日のカテゴリ別集計はありません。" in response.text
+
+
+def test_weekly_defaults_to_current_week(client: TestClient):
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    response = client.get("/weekly")
+
+    assert response.status_code == 200
+    assert "学習・作業時間の週次集計" in response.text
+    assert week_start.strftime("%Y/%m/%d") in response.text
+    assert week_end.strftime("%m/%d") in response.text
+    assert "次の週" in response.text
+    assert 'aria-disabled="true"' in response.text
+
+
+def test_weekly_normalizes_date_and_aggregates_entries(client: TestClient):
+    reference_date = date.today() - timedelta(days=14)
+    week_start = reference_date - timedelta(days=reference_date.weekday())
+    tuesday = week_start + timedelta(days=1)
+    session_factory = client.app.state.testing_session_factory
+
+    with session_factory() as db:
+        time_entry_crud.add_time_entry(db, week_start, 30, "月曜の学習", category="学習")
+        time_entry_crud.add_time_entry(db, tuesday, 45, "火曜の開発", category="個人開発")
+        time_entry_crud.add_time_entry(db, tuesday, 15, "火曜の復習", category="学習")
+
+    response = client.get(
+        "/weekly",
+        params={"target_date": (week_start + timedelta(days=3)).isoformat()},
+    )
+
+    assert response.status_code == 200
+    assert week_start.strftime("%Y/%m/%d") in response.text
+    assert "90分" in response.text
+    assert "3件" in response.text
+    assert "2日" in response.text
+    assert "月曜の学習" not in response.text
+    assert f'href="/history?target_date={week_start.isoformat()}"' in response.text
+    assert f'href="/history?target_date={tuesday.isoformat()}"' in response.text
+
+    with session_factory() as db:
+        total_minutes, entry_count = time_entry_crud.get_range_summary(
+            db,
+            week_start,
+            week_start + timedelta(days=6),
+        )
+        category_totals = dict(
+            time_entry_crud.get_category_totals_between(
+                db,
+                week_start,
+                week_start + timedelta(days=6),
+            )
+        )
+        daily_totals = dict(
+            time_entry_crud.get_daily_totals_between(
+                db,
+                week_start,
+                week_start + timedelta(days=6),
+            )
+        )
+
+    assert total_minutes == 90
+    assert entry_count == 3
+    assert category_totals == {"学習": 45, "個人開発": 45}
+    assert daily_totals == {week_start: 30, tuesday: 60}
+
+
+@pytest.mark.parametrize("target_date", ["", "not-a-date", "20260721", "2026-02-30"])
+def test_weekly_rejects_invalid_date(client: TestClient, target_date: str):
+    response = client.get("/weekly", params={"target_date": target_date})
+
+    assert response.status_code == 400
+    assert "日付はYYYY-MM-DD形式で指定してください。" in response.text
+
+
+def test_weekly_rejects_future_date(client: TestClient):
+    future_date = date.today() + timedelta(days=1)
+    response = client.get("/weekly", params={"target_date": future_date.isoformat()})
+
+    assert response.status_code == 400
+    assert "未来の日付は週次集計の基準日に指定できません。" in response.text
+
+
+def test_weekly_handles_minimum_date(client: TestClient):
+    response = client.get("/weekly", params={"target_date": date.min.isoformat()})
+
+    assert response.status_code == 200
+    assert "前の週" in response.text
+    assert 'aria-disabled="true"' in response.text
+
+
+def test_weekly_empty_state(client: TestClient):
+    target_date = date.today() - timedelta(days=35)
+    response = client.get("/weekly", params={"target_date": target_date.isoformat()})
+
+    assert response.status_code == 200
+    assert "この週のカテゴリ別集計はありません。" in response.text
+    assert "0件" in response.text
+    assert "0日" in response.text
+    assert "記録なし" in response.text
+
+
+def test_weekly_excludes_future_entries(client: TestClient):
+    future_date = date.today() + timedelta(days=1)
+    session_factory = client.app.state.testing_session_factory
+
+    with session_factory() as db:
+        time_entry_crud.add_time_entry(db, future_date, 120, "未来の記録", category="作業")
+
+    response = client.get("/weekly")
+
+    assert response.status_code == 200
+    assert "120分" not in response.text
+    assert "0件" in response.text
 
 
 def test_reject_empty_task(client: TestClient):
