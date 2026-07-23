@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>週次集計 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>Home Panel</h1>
+          <p>学習・作業時間の週次集計</p>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+          <a href="/history" class="button-link secondary-button">日別履歴</a>
+        </div>
+      </header>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      <section class="card history-controls" aria-labelledby="weekly-date-heading">
+        <div class="card-heading">
+          <h2 id="weekly-date-heading">表示する週</h2>
+        </div>
+        <form action="/weekly" method="get" class="history-filter">
+          <label for="target-date">週に含まれる日付</label>
+          <div class="inline-form">
+            <input
+              id="target-date"
+              type="date"
+              name="target_date"
+              value="{{ week_start.isoformat() }}"
+              max="{{ today.isoformat() }}"
+              required
+            />
+            <button type="submit">表示</button>
+          </div>
+          <p class="hint">選択した日を含む月曜日始まりの週を表示します。</p>
+        </form>
+        <nav class="history-navigation" aria-label="週を移動">
+          {% if previous_week_start %}
+          <a href="/weekly?target_date={{ previous_week_start.isoformat() }}" class="button-link secondary-button">前の週</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">前の週</span>
+          {% endif %}
+          {% if next_week_start %}
+          <a href="/weekly?target_date={{ next_week_start.isoformat() }}" class="button-link secondary-button">次の週</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">次の週</span>
+          {% endif %}
+        </nav>
+      </section>
+
+      <section class="weekly-summary" aria-label="選択週の概要">
+        <div class="card history-metric">
+          <span>対象期間</span>
+          <strong>{{ week_start.strftime('%Y/%m/%d') }}〜{{ week_end.strftime('%m/%d') }}</strong>
+          {% if effective_end < week_end %}
+          <small>集計は{{ effective_end.strftime('%m/%d') }}まで</small>
+          {% endif %}
+        </div>
+        <div class="card history-metric">
+          <span>合計時間</span>
+          <strong>{{ total_minutes }}分</strong>
+        </div>
+        <div class="card history-metric">
+          <span>記録件数</span>
+          <strong>{{ entry_count }}件</strong>
+        </div>
+        <div class="card history-metric">
+          <span>記録した日</span>
+          <strong>{{ active_days }}日</strong>
+        </div>
+      </section>
+
+      <div class="weekly-grid">
+        <section class="card" aria-labelledby="weekly-category-heading">
+          <div class="card-heading">
+            <h2 id="weekly-category-heading">カテゴリ別合計</h2>
+          </div>
+          <ul class="list history-entry-list">
+            {% for category, minutes in category_totals %}
+            <li class="history-entry">
+              <div>
+                <span class="entry-category">{{ category }}</span>
+                <strong>{{ minutes }}分</strong>
+              </div>
+            </li>
+            {% else %}
+            <li class="empty-state">この週のカテゴリ別集計はありません。</li>
+            {% endfor %}
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="weekly-daily-heading">
+          <div class="card-heading">
+            <h2 id="weekly-daily-heading">日別合計</h2>
+          </div>
+          <ul class="weekly-day-list">
+            {% for summary in daily_summaries %}
+            <li class="weekly-day {% if summary.is_future %}future{% endif %}">
+              <div class="weekly-day-header">
+                {% if summary.is_future %}
+                <span>{{ summary.date.strftime('%m/%d') }}（{{ summary.weekday }}）</span>
+                <span class="entry-category">未到来</span>
+                {% else %}
+                <a href="/history?target_date={{ summary.date.isoformat() }}">{{ summary.date.strftime('%m/%d') }}（{{ summary.weekday }}）</a>
+                <strong>{{ summary.minutes }}分</strong>
+                {% endif %}
+              </div>
+              {% if not summary.is_future %}
+              <div class="weekly-bar-track" aria-hidden="true">
+                <span class="weekly-bar" style="--bar-width: {{ summary.percentage }}%"></span>
+              </div>
+              {% if summary.minutes == 0 %}
+              <span class="entry-category">記録なし</span>
+              {% endif %}
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </section>
+      </div>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
