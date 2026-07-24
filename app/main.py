@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -13,6 +13,7 @@ from app import models  # noqa: F401
 from app.crud import memo as memo_crud
 from app.crud import task as task_crud
 from app.crud import time_entry as time_entry_crud
+from app.csv_export import build_time_entries_csv
 from app.db import Base, engine, get_db
 from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
@@ -374,6 +375,57 @@ def monthly(
             )
 
     return render_monthly(request, db, selected_month)
+
+
+@app.get("/exports/time-entries.csv")
+def export_time_entries_csv(
+    target_month: str | None = None,
+    db: Session = Depends(get_db),
+) -> Response:
+    today = date.today()
+    current_month_start = get_month_start(today)
+    selected_month = current_month_start
+
+    if target_month is not None:
+        parsed_month = parse_month(target_month)
+        if parsed_month is None:
+            return Response(
+                content="月はYYYY-MM形式で指定してください。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                media_type="text/plain; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+
+        selected_month = parsed_month
+        if selected_month > current_month_start:
+            return Response(
+                content="未来の月はCSV出力に指定できません。",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                media_type="text/plain; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+
+    month_end = get_month_end(selected_month)
+    effective_end = min(month_end, today)
+    entries = time_entry_crud.list_entries_between(db, selected_month, effective_end)
+    csv_content = build_time_entries_csv(entries)
+    filename = f"home-panel-time-entries-{selected_month.strftime('%Y-%m')}.csv"
+
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.post("/tasks")

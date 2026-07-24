@@ -27,6 +27,19 @@ def list_today_entries(db: Session, today: date) -> list[TimeEntry]:
     return list_entries_by_date(db, today)
 
 
+def list_entries_between(
+    db: Session,
+    start_date: date,
+    end_date: date,
+) -> list[TimeEntry]:
+    stmt = (
+        select(TimeEntry)
+        .where(TimeEntry.entry_date.between(start_date, end_date))
+        .order_by(TimeEntry.entry_date.asc(), TimeEntry.created_at.asc(), TimeEntry.id.asc())
+    )
+    return list(db.scalars(stmt).all())
+
+
 def get_total_minutes_by_date(db: Session, target_date: date) -> int:
     stmt = select(func.coalesce(func.sum(TimeEntry.minutes), 0)).where(
         TimeEntry.entry_date == target_date

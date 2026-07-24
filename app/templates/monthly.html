@@ -54,6 +54,11 @@
           {% else %}
           <span class="button-link disabled-button" aria-disabled="true">次の月</span>
           {% endif %}
+          <a
+            href="/exports/time-entries.csv?target_month={{ month_start.strftime('%Y-%m') }}"
+            class="button-link secondary-button"
+            download
+          >この月をCSV出力</a>
         </nav>
       </section>
 
