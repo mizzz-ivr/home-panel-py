@@ -169,7 +169,13 @@ def run_cli(args: Sequence[str] | None = None) -> int:
         f"sqlite:///{database_path.as_posix()}",
         connect_args={"check_same_thread": False},
     )
-    missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
+    try:
+        missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
+    except SQLAlchemyError as exc:
+        print(f"バックアップ対象のDBを確認できません: {exc}", file=sys.stderr)
+        engine.dispose()
+        return 1
+
     if missing_tables:
         print(
             "必要なテーブルが不足しています: " + ", ".join(sorted(missing_tables)),
