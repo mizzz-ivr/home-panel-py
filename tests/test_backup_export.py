@@ -151,6 +151,16 @@ def test_run_cli_rejects_database_with_missing_tables(tmp_path: Path, capsys):
     assert "必要なテーブルが不足しています" in capsys.readouterr().err
 
 
+def test_run_cli_handles_corrupted_database(tmp_path: Path, capsys):
+    database = tmp_path / "corrupted.db"
+    database.write_text("not a sqlite database", encoding="utf-8")
+
+    result = run_cli(["--database", str(database)])
+
+    assert result == 1
+    assert "DBを確認できません" in capsys.readouterr().err
+
+
 def test_run_cli_rejects_database_as_output_path(tmp_path: Path, capsys):
     database = tmp_path / "source.db"
     engine = create_engine(f"sqlite:///{database}", connect_args={"check_same_thread": False})
