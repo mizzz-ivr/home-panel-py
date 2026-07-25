@@ -1,0 +1,75 @@
+.dashboard-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dashboard-settings[open] summary {
+  margin-bottom: 4px;
+}
+
+.dashboard-settings .hint {
+  margin-bottom: 0;
+}
+
+.dashboard-card-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.dashboard-card-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dashboard-card-option input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.dashboard-card-option span {
+  overflow-wrap: anywhere;
+}
+
+.dashboard-settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-settings button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+#preferences-status {
+  min-height: 1.4em;
+  margin: 0;
+}
+
+#preferences-status.settings-error {
+  color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+  .dashboard-card-options {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-settings-actions > * {
+    flex: 1 1 auto;
+  }
+}

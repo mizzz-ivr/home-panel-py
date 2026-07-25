@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Home Panel</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/dashboard.css" />
   </head>
   <body>
     <main class="container">
@@ -17,7 +18,6 @@
           <a href="/history" class="button-link secondary-button">履歴を見る</a>
           <a href="/weekly" class="button-link secondary-button">週次集計</a>
           <a href="/monthly" class="button-link secondary-button">月次集計</a>
-          <button id="reset-layout" type="button" class="secondary-button">配置を初期化</button>
         </div>
       </header>
 
@@ -25,133 +25,50 @@
       <section class="card error" role="alert">{{ error_message }}</section>
       {% endif %}
 
+      <details class="card dashboard-settings">
+        <summary>ダッシュボードの表示設定</summary>
+        <p class="hint">
+          表示するカードを選択できます。並び順と表示設定はこのHome PanelのSQLiteへ保存されます。
+        </p>
+        <div class="dashboard-card-options" id="dashboard-card-options">
+          {% for card in dashboard_all_cards %}
+          <label class="dashboard-card-option">
+            <input
+              type="checkbox"
+              value="{{ card.card_id }}"
+              data-card-visibility
+              {% if card.card_id not in dashboard_preferences.hidden %}checked{% endif %}
+            />
+            <span>{{ card.title }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="dashboard-settings-actions">
+          <button id="save-card-visibility" type="button">表示設定を保存</button>
+          <button id="reset-layout" type="button" class="secondary-button">設定を初期化</button>
+        </div>
+        <p id="preferences-status" class="hint" aria-live="polite"></p>
+      </details>
+
       <p class="layout-hint" id="layout-help">
-        各カードの「並び替え」ハンドルをドラッグすると配置を変更できます。配置はこのブラウザに保存されます。
+        各カードの「並び替え」ハンドルをドラッグすると配置を変更できます。配置はサーバーへ自動保存されます。
       </p>
 
-      <div class="dashboard-grid" data-swapy-container aria-describedby="layout-help">
-        <div class="dashboard-slot" data-swapy-slot="slot-1">
-          <section class="card dashboard-card" data-swapy-item="todo">
-            <div class="card-heading">
-              <h2>ToDo</h2>
-              <button
-                type="button"
-                class="drag-handle"
-                data-swapy-handle
-                aria-label="ToDoカードを並び替え"
-                title="ドラッグして並び替え"
-              >
-                <span aria-hidden="true">⠿</span>
-                <span>並び替え</span>
-              </button>
-            </div>
-            <form action="/tasks" method="post" class="inline-form">
-              <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
-              <button type="submit">追加</button>
-            </form>
-            <ul class="list">
-              {% for task in tasks %}
-              <li class="todo-item {% if task.is_done %}done{% endif %}">
-                <span>{{ task.title }}</span>
-                <div class="actions">
-                  <form action="/tasks/{{ task.id }}/toggle" method="post">
-                    <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
-                  </form>
-                  <form action="/tasks/{{ task.id }}/delete" method="post">
-                    <button type="submit" class="danger">削除</button>
-                  </form>
-                </div>
-              </li>
-              {% else %}
-              <li>タスクはまだありません。</li>
-              {% endfor %}
-            </ul>
-          </section>
+      <div
+        class="dashboard-grid"
+        data-swapy-container
+        data-preferences-endpoint="/api/dashboard/preferences"
+        aria-describedby="layout-help"
+      >
+        {% for card in dashboard_cards %}
+        <div class="dashboard-slot" data-swapy-slot="slot-{{ loop.index }}">
+          {% include card.template %}
         </div>
-
-        <div class="dashboard-slot" data-swapy-slot="slot-2">
-          <section class="card dashboard-card" data-swapy-item="memo">
-            <div class="card-heading">
-              <h2>今日のメモ</h2>
-              <button
-                type="button"
-                class="drag-handle"
-                data-swapy-handle
-                aria-label="今日のメモカードを並び替え"
-                title="ドラッグして並び替え"
-              >
-                <span aria-hidden="true">⠿</span>
-                <span>並び替え</span>
-              </button>
-            </div>
-            <form action="/memo/today" method="post">
-              <p class="hint">空で保存すると当日のメモをクリアできます。</p>
-              <textarea name="content" rows="6" maxlength="5000" placeholder="今日のメモを記録">{{ memo_content }}</textarea>
-              <button type="submit">保存</button>
-            </form>
-          </section>
-        </div>
-
-        <div class="dashboard-slot" data-swapy-slot="slot-3">
-          <section class="card dashboard-card" data-swapy-item="time">
-            <div class="card-heading">
-              <h2>学習/作業時間</h2>
-              <button
-                type="button"
-                class="drag-handle"
-                data-swapy-handle
-                aria-label="学習・作業時間カードを並び替え"
-                title="ドラッグして並び替え"
-              >
-                <span aria-hidden="true">⠿</span>
-                <span>並び替え</span>
-              </button>
-            </div>
-            <p class="total">当日合計: <strong>{{ total_minutes }}</strong> 分</p>
-            {% if category_totals %}
-            <h3>カテゴリ別合計</h3>
-            <ul class="list history-entry-list" aria-label="当日のカテゴリ別合計">
-              {% for category, minutes in category_totals %}
-              <li class="history-entry">
-                <div>
-                  <span class="entry-category">{{ category }}</span>
-                  <strong>{{ minutes }}分</strong>
-                </div>
-              </li>
-              {% endfor %}
-            </ul>
-            {% endif %}
-            <form action="/time-entries" method="post" class="inline-form">
-              <label for="time-category" class="sr-only">カテゴリ</label>
-              <select id="time-category" name="category" class="secondary-button" required>
-                {% for category in time_entry_categories %}
-                <option value="{{ category }}" {% if category == '作業' %}selected{% endif %}>{{ category }}</option>
-                {% endfor %}
-              </select>
-              <label for="time-minutes" class="sr-only">時間（分）</label>
-              <input id="time-minutes" type="number" name="minutes" min="1" max="1440" placeholder="分" required />
-              <label for="time-note" class="sr-only">メモ</label>
-              <input id="time-note" type="text" name="note" maxlength="255" placeholder="メモ（任意）" />
-              <button type="submit">追加</button>
-            </form>
-            <ul class="list history-entry-list">
-              {% for entry in entries %}
-              <li class="history-entry">
-                <div>
-                  <strong>{{ entry.minutes }}分</strong>
-                  <span class="entry-category">{{ entry.category }}</span>
-                </div>
-                <p>{{ entry.note or 'メモなし' }}</p>
-              </li>
-              {% else %}
-              <li>まだ記録がありません。</li>
-              {% endfor %}
-            </ul>
-          </section>
-        </div>
+        {% endfor %}
       </div>
 
       <p id="layout-status" class="sr-only" aria-live="polite"></p>
+      <script id="dashboard-preferences-data" type="application/json">{{ dashboard_preferences_payload | tojson }}</script>
     </main>
     <script src="https://unpkg.com/swapy@1.0.5/dist/swapy.min.js" defer></script>
     <script src="/static/app.js" defer></script>

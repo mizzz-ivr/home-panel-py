@@ -1,0 +1,36 @@
+<section class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
+  <div class="card-heading">
+    <h2>{{ card.title }}</h2>
+    <button
+      type="button"
+      class="drag-handle"
+      data-swapy-handle
+      aria-label="{{ card.title }}カードを並び替え"
+      title="ドラッグして並び替え"
+    >
+      <span aria-hidden="true">⠿</span>
+      <span>並び替え</span>
+    </button>
+  </div>
+  <form action="/tasks" method="post" class="inline-form">
+    <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
+    <button type="submit">追加</button>
+  </form>
+  <ul class="list">
+    {% for task in tasks %}
+    <li class="todo-item {% if task.is_done %}done{% endif %}">
+      <span>{{ task.title }}</span>
+      <div class="actions">
+        <form action="/tasks/{{ task.id }}/toggle" method="post">
+          <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
+        </form>
+        <form action="/tasks/{{ task.id }}/delete" method="post">
+          <button type="submit" class="danger">削除</button>
+        </form>
+      </div>
+    </li>
+    {% else %}
+    <li>タスクはまだありません。</li>
+    {% endfor %}
+  </ul>
+</section>
