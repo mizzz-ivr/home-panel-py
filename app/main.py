@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app import models  # noqa: F401
 from app.crud import app_setting as app_setting_crud
+from app.crud import habit as habit_crud
 from app.crud import memo as memo_crud
 from app.crud import task as task_crud
 from app.crud import time_entry as time_entry_crud
@@ -23,6 +24,7 @@ from app.dashboard_cards import (
 )
 from app.db import Base, engine, get_db
 from app.schemas.dashboard import DashboardPreferencesUpdate
+from app.schemas.habit import HabitCreate
 from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
@@ -71,6 +73,7 @@ def render_dashboard(
     entries = time_entry_crud.list_today_entries(db, today)
     total_minutes = time_entry_crud.get_today_total_minutes(db, today)
     category_totals = time_entry_crud.get_today_category_totals(db, today)
+    habit_items, habit_completed_today, habit_total = habit_crud.get_dashboard_summary(db, today)
     dashboard_preferences = get_dashboard_preferences(db)
     dashboard_preferences_payload = dashboard_preferences.to_dict()
     dashboard_preferences_payload["persisted"] = dashboard_preferences.persisted
@@ -86,6 +89,10 @@ def render_dashboard(
             "total_minutes": total_minutes,
             "category_totals": category_totals,
             "time_entry_categories": TIME_ENTRY_CATEGORIES,
+            "habit_items": habit_items,
+            "habit_completed_today": habit_completed_today,
+            "habit_total": habit_total,
+            "habit_max_active": habit_crud.MAX_ACTIVE_HABITS,
             "dashboard_preferences": dashboard_preferences,
             "dashboard_preferences_payload": dashboard_preferences_payload,
             "dashboard_all_cards": dashboard_preferences.ordered_cards(),
@@ -529,6 +536,74 @@ def delete_task(request: Request, task_id: int, db: Session = Depends(get_db)):
             request,
             db,
             "指定されたタスクが存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/habits")
+def create_habit(
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = HabitCreate(name=name)
+    except ValidationError:
+        return render_dashboard(
+            request,
+            db,
+            "習慣名は1〜100文字で入力してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if habit_crud.find_active_habit_by_name(db, payload.name) is not None:
+        return render_dashboard(
+            request,
+            db,
+            "同じ名前の習慣が既にあります。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if habit_crud.count_active_habits(db) >= habit_crud.MAX_ACTIVE_HABITS:
+        return render_dashboard(
+            request,
+            db,
+            f"アクティブな習慣は最大{habit_crud.MAX_ACTIVE_HABITS}件です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    habit_crud.create_habit(db, payload.name)
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/habits/{habit_id}/toggle-today")
+def toggle_habit_today(
+    request: Request,
+    habit_id: int,
+    db: Session = Depends(get_db),
+):
+    result = habit_crud.toggle_today_completion(db, habit_id, date.today())
+    if result is None:
+        return render_dashboard(
+            request,
+            db,
+            "指定された習慣が存在しないか、既に終了しています。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/habits/{habit_id}/archive")
+def archive_habit(
+    request: Request,
+    habit_id: int,
+    db: Session = Depends(get_db),
+):
+    if not habit_crud.archive_habit(db, habit_id):
+        return render_dashboard(
+            request,
+            db,
+            "指定された習慣が存在しないか、既に終了しています。",
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
