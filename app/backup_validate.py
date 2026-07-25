@@ -14,7 +14,11 @@ from app.backup_export import BACKUP_SCHEMA_VERSION
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES
 
 BACKUP_APPLICATION = "home-panel-py"
-BACKUP_TABLES = ("tasks", "daily_memos", "time_entries")
+SUPPORTED_BACKUP_SCHEMA_VERSIONS = (1, BACKUP_SCHEMA_VERSION)
+BACKUP_TABLES_BY_VERSION = {
+    1: ("tasks", "daily_memos", "time_entries"),
+    2: ("tasks", "daily_memos", "time_entries", "habits", "habit_completions"),
+}
 MAX_BACKUP_FILE_SIZE = 50 * 1024 * 1024
 MAX_VALIDATION_ERRORS = 100
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -165,21 +169,9 @@ def validate_task(record: Any, index: int, errors: ErrorCollector) -> int | None
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
 
-    validate_exact_keys(
-        record,
-        {"id", "title", "is_done", "created_at", "updated_at"},
-        path,
-        errors,
-    )
+    validate_exact_keys(record, {"id", "title", "is_done", "created_at", "updated_at"}, path, errors)
     task_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
-    validate_string(
-        record.get("title"),
-        f"{path}.title",
-        errors,
-        min_length=1,
-        max_length=255,
-        disallow_blank=True,
-    )
+    validate_string(record.get("title"), f"{path}.title", errors, min_length=1, max_length=255, disallow_blank=True)
     if type(record.get("is_done")) is not bool:
         errors.add(f"{path}.is_done: 真偽値である必要があります。")
     created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
@@ -209,28 +201,50 @@ def validate_time_entry(record: Any, index: int, errors: ErrorCollector) -> int 
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
 
-    validate_exact_keys(
-        record,
-        {"id", "entry_date", "category", "minutes", "note", "created_at"},
-        path,
-        errors,
-    )
+    validate_exact_keys(record, {"id", "entry_date", "category", "minutes", "note", "created_at"}, path, errors)
     entry_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
     validate_date_string(record.get("entry_date"), f"{path}.entry_date", errors)
-
     category = record.get("category")
     if type(category) is not str or category not in TIME_ENTRY_CATEGORIES:
-        errors.add(
-            f"{path}.category: " + "・".join(TIME_ENTRY_CATEGORIES) + "のいずれかである必要があります。"
-        )
-
+        errors.add(f"{path}.category: " + "・".join(TIME_ENTRY_CATEGORIES) + "のいずれかである必要があります。")
     minutes = record.get("minutes")
     if type(minutes) is not int or not 1 <= minutes <= 1440:
         errors.add(f"{path}.minutes: 1〜1440の整数である必要があります。")
-
     validate_string(record.get("note"), f"{path}.note", errors, max_length=255)
     validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
     return entry_id
+
+
+def validate_habit(record: Any, index: int, errors: ErrorCollector) -> int | None:
+    path = f"data.habits[{index}]"
+    if type(record) is not dict:
+        errors.add(f"{path}: オブジェクトである必要があります。")
+        return None
+
+    validate_exact_keys(record, {"id", "name", "is_active", "created_at", "updated_at"}, path, errors)
+    habit_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
+    validate_string(record.get("name"), f"{path}.name", errors, min_length=1, max_length=100, disallow_blank=True)
+    if type(record.get("is_active")) is not bool:
+        errors.add(f"{path}.is_active: 真偽値である必要があります。")
+    created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    if created_at is not None and updated_at is not None and updated_at < created_at:
+        errors.add(f"{path}.updated_at: created_at以降である必要があります。")
+    return habit_id
+
+
+def validate_habit_completion(record: Any, index: int, errors: ErrorCollector) -> int | None:
+    path = f"data.habit_completions[{index}]"
+    if type(record) is not dict:
+        errors.add(f"{path}: オブジェクトである必要があります。")
+        return None
+
+    validate_exact_keys(record, {"id", "habit_id", "completed_on", "created_at"}, path, errors)
+    completion_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
+    validate_positive_id(record.get("habit_id"), f"{path}.habit_id", errors)
+    validate_date_string(record.get("completed_on"), f"{path}.completed_on", errors)
+    validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    return completion_id
 
 
 def validate_records(
@@ -238,11 +252,11 @@ def validate_records(
     table_name: str,
     validator: Any,
     errors: ErrorCollector,
-) -> int | None:
+) -> tuple[int | None, set[int]]:
     path = f"data.{table_name}"
     if type(records) is not list:
         errors.add(f"{path}: 配列である必要があります。")
-        return None
+        return None, set()
 
     seen_ids: set[int] = set()
     for index, record in enumerate(records):
@@ -251,7 +265,27 @@ def validate_records(
             if record_id in seen_ids:
                 errors.add(f"{path}[{index}].id: ID {record_id} が重複しています。")
             seen_ids.add(record_id)
-    return len(records)
+    return len(records), seen_ids
+
+
+def validate_habit_references(data: dict[str, Any], habit_ids: set[int], errors: ErrorCollector) -> None:
+    records = data.get("habit_completions")
+    if type(records) is not list:
+        return
+
+    seen_pairs: set[tuple[int, str]] = set()
+    for index, record in enumerate(records):
+        if type(record) is not dict:
+            continue
+        habit_id = record.get("habit_id")
+        completed_on = record.get("completed_on")
+        if type(habit_id) is int and habit_id not in habit_ids:
+            errors.add(f"data.habit_completions[{index}].habit_id: habitsに存在しないIDです。")
+        if type(habit_id) is int and type(completed_on) is str:
+            pair = (habit_id, completed_on)
+            if pair in seen_pairs:
+                errors.add(f"data.habit_completions[{index}]: 同じ習慣・日付の達成記録が重複しています。")
+            seen_pairs.add(pair)
 
 
 def validate_backup_payload(payload: Any) -> list[str]:
@@ -260,21 +294,15 @@ def validate_backup_payload(payload: Any) -> list[str]:
         errors.add("$: JSONのルートはオブジェクトである必要があります。")
         return errors.result()
 
-    validate_exact_keys(
-        payload,
-        {"schema_version", "application", "exported_at", "record_counts", "data"},
-        "$",
-        errors,
-    )
-
+    validate_exact_keys(payload, {"schema_version", "application", "exported_at", "record_counts", "data"}, "$", errors)
     schema_version = payload.get("schema_version")
     if type(schema_version) is not int:
         errors.add("$.schema_version: 整数である必要があります。")
         return errors.result()
-    if schema_version != BACKUP_SCHEMA_VERSION:
+    if schema_version not in SUPPORTED_BACKUP_SCHEMA_VERSIONS:
         errors.add(
-            f"$.schema_version: 未対応のバージョンです。"
-            f"対応={BACKUP_SCHEMA_VERSION}、指定={schema_version}"
+            "$.schema_version: 未対応のバージョンです。"
+            f"対応={SUPPORTED_BACKUP_SCHEMA_VERSIONS}、指定={schema_version}"
         )
         return errors.result()
 
@@ -282,26 +310,31 @@ def validate_backup_payload(payload: Any) -> list[str]:
         errors.add(f"$.application: {BACKUP_APPLICATION}である必要があります。")
     validate_utc_datetime_string(payload.get("exported_at"), "$.exported_at", errors)
 
+    table_names = BACKUP_TABLES_BY_VERSION[schema_version]
     record_counts = payload.get("record_counts")
     data = payload.get("data")
     if type(record_counts) is not dict:
         errors.add("$.record_counts: オブジェクトである必要があります。")
         record_counts = {}
     else:
-        validate_exact_keys(record_counts, set(BACKUP_TABLES), "record_counts", errors)
+        validate_exact_keys(record_counts, set(table_names), "record_counts", errors)
 
     if type(data) is not dict:
         errors.add("$.data: オブジェクトである必要があります。")
         return errors.result()
-    validate_exact_keys(data, set(BACKUP_TABLES), "data", errors)
+    validate_exact_keys(data, set(table_names), "data", errors)
 
     validators = {
         "tasks": validate_task,
         "daily_memos": validate_daily_memo,
         "time_entries": validate_time_entry,
+        "habits": validate_habit,
+        "habit_completions": validate_habit_completion,
     }
-    for table_name in BACKUP_TABLES:
-        actual_count = validate_records(data.get(table_name), table_name, validators[table_name], errors)
+    ids_by_table: dict[str, set[int]] = {}
+    for table_name in table_names:
+        actual_count, record_ids = validate_records(data.get(table_name), table_name, validators[table_name], errors)
+        ids_by_table[table_name] = record_ids
         expected_count = record_counts.get(table_name)
         if type(expected_count) is not int or expected_count < 0:
             errors.add(f"record_counts.{table_name}: 0以上の整数である必要があります。")
@@ -310,6 +343,9 @@ def validate_backup_payload(payload: Any) -> list[str]:
                 f"record_counts.{table_name}: 配列件数と一致しません。"
                 f"記録={expected_count}、実際={actual_count}"
             )
+
+    if schema_version >= 2:
+        validate_habit_references(data, ids_by_table.get("habits", set()), errors)
 
     return errors.result()
 
@@ -356,11 +392,11 @@ def run_cli(args: Sequence[str] | None = None) -> int:
         return 2
 
     counts = payload["record_counts"]
+    summary = f"ToDo={counts['tasks']}、メモ={counts['daily_memos']}、時間記録={counts['time_entries']}"
+    if payload["schema_version"] >= 2:
+        summary += f"、習慣={counts['habits']}、習慣達成={counts['habit_completions']}"
     print("バックアップは有効です。")
-    print(
-        "レコード件数: "
-        f"ToDo={counts['tasks']}、メモ={counts['daily_memos']}、時間記録={counts['time_entries']}"
-    )
+    print(f"レコード件数: {summary}")
     print(f"SHA-256: {digest}")
     return 0
 
