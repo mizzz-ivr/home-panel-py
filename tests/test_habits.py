@@ -77,7 +77,11 @@ def test_rejects_blank_duplicate_and_too_long_habit_names(client: TestClient):
 
 def test_rejects_more_than_twenty_active_habits(client: TestClient):
     for index in range(habit_crud.MAX_ACTIVE_HABITS):
-        response = client.post("/habits", data={"name": f"習慣{index}"})
+        response = client.post(
+            "/habits",
+            data={"name": f"習慣{index}"},
+            follow_redirects=False,
+        )
         assert response.status_code == 303
 
     response = client.post("/habits", data={"name": "上限超過"})
