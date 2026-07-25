@@ -1,11 +1,11 @@
 # home-panel-py
 
 ローカルPCで動かす、個人用のダッシュボードです。  
-今日のToDo・メモ・作業時間を1画面で管理し、日別・週次・月次の振り返りやデータ出力も行えます。
+今日のToDo・メモ・作業時間・習慣を1画面で管理し、日別・週次・月次の振り返りやデータ出力も行えます。
 
 ## プロジェクト概要
 
-- 目的: 日々のタスク・メモ・作業時間をまとめて管理する
+- 目的: 日々のタスク・メモ・作業時間・継続習慣をまとめて管理する
 - 想定利用: 個人利用・ローカル起動
 - データ保存: SQLite
 - 方針: 既存機能への影響を抑えながら、小さな単位で拡張する
@@ -31,6 +31,17 @@
 - 当日合計
 - カテゴリ別合計
 
+### 習慣トラッカー
+
+- 習慣の追加
+- 今日の達成・取り消し
+- 今日の達成件数
+- 現在の連続達成日数
+- 履歴を残したまま習慣を終了
+- アクティブ習慣は最大20件
+
+詳細は[`HABITS.md`](./HABITS.md)を参照してください。
+
 ### 履歴・集計
 
 - 日付を指定した日別履歴
@@ -39,11 +50,14 @@
 - 合計時間・記録件数・記録日数・カテゴリ別合計
 - 未来日・不正日付の拒否
 
+現時点の履歴・週次・月次集計はメモと時間記録が対象です。習慣の履歴集計は今後の拡張対象です。
+
 ### エクスポート・バックアップ
 
 - 月単位の時間記録CSV
-- ToDo・メモ・時間記録のJSONバックアップCLI
-- JSONバックアップの構造・件数・SHA-256検証CLI
+- ToDo・メモ・時間記録・習慣のJSONバックアップCLI
+- JSONバックアップの構造・件数・参照整合性・SHA-256検証CLI
+- バックアップスキーマv1・v2の検証互換
 
 ### ダッシュボード設定
 
@@ -52,6 +66,7 @@
 - 並び順と表示設定のSQLite保存
 - 設定の初期化
 - 旧localStorage配置のサーバー設定への自動移行
+- 新カード追加時の既存設定補完
 - 設定駆動のカード登録基盤
 
 ## 使用技術
@@ -104,7 +119,7 @@ uvicorn app.main:app --reload
 - 時間記録CSV: <http://127.0.0.1:8000/exports/time-entries.csv>
 
 初回起動時に`home_panel.db`が自動作成されます。  
-再起動後もToDo・メモ・時間記録・ダッシュボード設定は保持されます。
+再起動後もToDo・メモ・時間記録・習慣・ダッシュボード設定は保持されます。
 
 ## 時間記録カテゴリ
 
@@ -117,6 +132,24 @@ uvicorn app.main:app --reload
 
 カテゴリを送信しない既存クライアントは、従来どおり「作業」として保存されます。
 
+## 習慣トラッカー
+
+習慣本体と日次達成記録は別テーブルで管理します。
+
+- 習慣名は1〜100文字
+- 空白のみは不可
+- 同名のアクティブ習慣は不可
+- 同じ習慣・同じ日付の達成記録は1件だけ
+- 「終了」は物理削除ではなくアーカイブ
+- 今日が未達でも、昨日まで連続していれば継続日数を維持
+
+データテーブル:
+
+- `habits`
+- `habit_completions`
+
+詳細な仕様、連続日数の計算、エラー時の挙動は[`HABITS.md`](./HABITS.md)を参照してください。
+
 ## 日別履歴
 
 `/history`は当日を表示します。`target_date`で日付を指定できます。
@@ -128,7 +161,7 @@ uvicorn app.main:app --reload
 - `YYYY-MM-DD`形式のみ
 - 未来日は400
 - メモ、時間記録、合計時間、件数、カテゴリ別合計を表示
-- ToDoは日付・完了日を保持していないため対象外
+- ToDoと習慣は現時点では対象外
 - 読み取り専用
 
 ## 週次集計
@@ -181,10 +214,14 @@ python -m app.backup_export
 ~/HomePanelBackups/home-panel-backup-YYYYMMDDTHHMMSSZ.json
 ```
 
-バックアップの詳細は[`BACKUP.md`](./BACKUP.md)を参照してください。
+現在生成するバックアップはスキーマv2です。
 
-現在のバックアップスキーマv1は、ToDo・日別メモ・時間記録を対象とします。  
+- v1: ToDo・日別メモ・時間記録
+- v2: v1に習慣・習慣達成記録を追加
+
 `app_settings`に保存するダッシュボード表示設定は運用設定として扱い、現時点ではバックアップ対象外です。
+
+詳細は[`BACKUP.md`](./BACKUP.md)を参照してください。
 
 ## バックアップ検証
 
@@ -192,7 +229,20 @@ python -m app.backup_export
 python -m app.backup_validate /path/to/home-panel-backup.json
 ```
 
-検証成功時にレコード件数とSHA-256を表示します。
+検証CLIはスキーマv1とv2を受け付けます。
+
+主な検証:
+
+- 必須項目と未知項目
+- レコード件数
+- ID重複
+- 入力制約
+- 日付・UTC日時
+- 習慣達成から習慣への参照
+- 同じ習慣・同じ日付の重複
+- SHA-256
+
+既知のSHA-256と照合する場合:
 
 ```bash
 python -m app.backup_validate /path/to/home-panel-backup.json \
@@ -211,7 +261,7 @@ python -m app.backup_validate /path/to/home-panel-backup.json \
 
 ```json
 {
-  "order": ["todo", "memo", "time"],
+  "order": ["todo", "memo", "time", "habits"],
   "hidden": []
 }
 ```
@@ -223,9 +273,10 @@ python -m app.backup_validate /path/to/home-panel-backup.json \
 - 非表示には登録済みカードだけ指定
 - 最低1枚は表示
 - 不正なDB保存値は既定設定へフォールバック
+- 新カード追加時は既存順序・非表示を維持して不足カードを末尾補完
 - API応答は`Cache-Control: no-store`
 - Swapy読み込み失敗時も通常の入力機能は利用可能
-- 旧`home-panel:dashboard-layout:v1` localStorage値は、サーバー設定が未保存の場合に限り一度だけ移行
+- 旧`home-panel:dashboard-layout:v1` localStorage値は、不足カードを補完して一度だけ移行
 
 カード追加手順と設計上のルールは[`DASHBOARD.md`](./DASHBOARD.md)を参照してください。
 
@@ -241,6 +292,10 @@ python -m app.backup_validate /path/to/home-panel-backup.json \
   - カテゴリは固定4種類
   - 時間は1〜1440分
   - メモは255文字以内
+- 習慣
+  - 1〜100文字
+  - 空白・同名・21件目を拒否
+  - 存在しない・終了済みIDは404
 - 履歴・集計
   - 日付・月形式を厳密検証
   - 未来日・未来月を拒否
@@ -261,16 +316,19 @@ home-panel-py/
 │  ├─ backup_validate.py
 │  ├─ models/
 │  │  ├─ app_setting.py
+│  │  ├─ habit.py
 │  │  ├─ task.py
 │  │  ├─ memo.py
 │  │  └─ time_entry.py
 │  ├─ schemas/
 │  │  ├─ dashboard.py
+│  │  ├─ habit.py
 │  │  ├─ task.py
 │  │  ├─ memo.py
 │  │  └─ time_entry.py
 │  ├─ crud/
 │  │  ├─ app_setting.py
+│  │  ├─ habit.py
 │  │  ├─ task.py
 │  │  ├─ memo.py
 │  │  └─ time_entry.py
@@ -288,6 +346,7 @@ home-panel-py/
 ├─ tests/
 ├─ BACKUP.md
 ├─ DASHBOARD.md
+├─ HABITS.md
 ├─ requirements.txt
 └─ README.md
 ```
@@ -301,10 +360,11 @@ pytest -q
 主な確認範囲:
 
 - ToDo・メモ・時間記録
+- 習慣追加・達成・取り消し・終了・連続日数・上限
 - 日別・週次・月次集計
 - CSVエクスポート
-- JSONバックアップ生成・検証
-- ダッシュボード設定の保存・非表示・順序・初期化
+- JSONバックアップv2生成とv1・v2検証
+- ダッシュボード設定の保存・非表示・順序・初期化・新カード補完
 - 不正設定と壊れたDB設定値のフォールバック
 - Swapy用HTML構造とJavaScript配信
 
@@ -324,9 +384,11 @@ pytest -q
 
 ## 今後の拡張候補
 
+- 習慣名の編集、終了済み習慣の一覧・再開
+- 習慣の曜日・頻度設定
+- 習慣の日別・週次・月次集計
 - キーボード操作によるカード並び替え
 - ダッシュボードの表示密度・テーマ設定
-- ダッシュボード設定を含むバックアップスキーマv2
 - JSONバックアップからの安全な復元
 - 週次・月次集計のカテゴリ積み上げ表示
 - カード単位の権限・更新頻度・キャッシュ設定
