@@ -46,7 +46,7 @@ def test_dashboard_preferences_default_to_all_cards(client: TestClient):
 
     assert response.status_code == 200
     assert response.json() == {
-        "order": ["todo", "memo", "time"],
+        "order": ["todo", "memo", "time", "habits"],
         "hidden": [],
         "persisted": False,
     }
@@ -55,52 +55,48 @@ def test_dashboard_preferences_default_to_all_cards(client: TestClient):
 
     dashboard = client.get("/")
     assert dashboard.status_code == 200
-    assert 'data-swapy-item="todo"' in dashboard.text
-    assert 'data-swapy-item="memo"' in dashboard.text
-    assert 'data-swapy-item="time"' in dashboard.text
+    for card_id in ("todo", "memo", "time", "habits"):
+        assert f'data-swapy-item="{card_id}"' in dashboard.text
     assert 'data-preferences-endpoint="/api/dashboard/preferences"' in dashboard.text
     assert 'href="/static/dashboard.css"' in dashboard.text
 
 
 def test_dashboard_preferences_are_saved_and_applied_to_rendering(client: TestClient):
-    response = client.put(
-        "/api/dashboard/preferences",
-        json={"order": ["time", "todo", "memo"], "hidden": ["memo"]},
-    )
+    payload = {
+        "order": ["time", "habits", "todo", "memo"],
+        "hidden": ["memo"],
+    }
+    response = client.put("/api/dashboard/preferences", json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {
-        "order": ["time", "todo", "memo"],
-        "hidden": ["memo"],
-        "persisted": True,
-    }
-
-    saved = client.get("/api/dashboard/preferences")
-    assert saved.json() == response.json()
+    assert response.json() == {**payload, "persisted": True}
+    assert client.get("/api/dashboard/preferences").json() == response.json()
 
     dashboard = client.get("/")
     assert dashboard.status_code == 200
     assert dashboard.text.index('data-swapy-item="time"') < dashboard.text.index(
-        'data-swapy-item="todo"'
+        'data-swapy-item="habits"'
     )
     assert 'data-swapy-item="memo"' not in dashboard.text
     assert 'value="memo"' in dashboard.text
 
     session_factory = client.app.state.testing_session_factory
     with session_factory() as db:
-        stored = app_setting_crud.get_json_setting(db, DASHBOARD_PREFERENCES_KEY)
-        assert stored == {"order": ["time", "todo", "memo"], "hidden": ["memo"]}
+        assert app_setting_crud.get_json_setting(db, DASHBOARD_PREFERENCES_KEY) == payload
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"order": ["todo", "memo"], "hidden": []},
-        {"order": ["todo", "memo", "memo"], "hidden": []},
-        {"order": ["todo", "memo", "unknown"], "hidden": []},
-        {"order": ["todo", "memo", "time"], "hidden": ["unknown"]},
-        {"order": ["todo", "memo", "time"], "hidden": ["memo", "memo"]},
-        {"order": ["todo", "memo", "time"], "hidden": ["todo", "memo", "time"]},
+        {"order": ["todo", "memo", "time"], "hidden": []},
+        {"order": ["todo", "memo", "time", "time"], "hidden": []},
+        {"order": ["todo", "memo", "time", "unknown"], "hidden": []},
+        {"order": ["todo", "memo", "time", "habits"], "hidden": ["unknown"]},
+        {"order": ["todo", "memo", "time", "habits"], "hidden": ["memo", "memo"]},
+        {
+            "order": ["todo", "memo", "time", "habits"],
+            "hidden": ["todo", "memo", "time", "habits"],
+        },
     ],
 )
 def test_dashboard_preferences_reject_invalid_card_sets(client: TestClient, payload):
@@ -114,7 +110,7 @@ def test_dashboard_preferences_reject_invalid_card_sets(client: TestClient, payl
 def test_dashboard_preferences_reject_invalid_json_shape(client: TestClient):
     response = client.put(
         "/api/dashboard/preferences",
-        json={"order": "todo,memo,time", "hidden": []},
+        json={"order": "todo,memo,time,habits", "hidden": []},
     )
 
     assert response.status_code == 422
@@ -124,21 +120,20 @@ def test_dashboard_preferences_reject_invalid_json_shape(client: TestClient):
 def test_dashboard_preferences_can_be_reset(client: TestClient):
     client.put(
         "/api/dashboard/preferences",
-        json={"order": ["memo", "time", "todo"], "hidden": ["time"]},
+        json={"order": ["memo", "habits", "time", "todo"], "hidden": ["time"]},
     )
 
     response = client.delete("/api/dashboard/preferences")
 
     assert response.status_code == 200
     assert response.json() == {
-        "order": ["todo", "memo", "time"],
+        "order": ["todo", "memo", "time", "habits"],
         "hidden": [],
         "persisted": False,
     }
     dashboard = client.get("/")
-    assert 'data-swapy-item="todo"' in dashboard.text
-    assert 'data-swapy-item="memo"' in dashboard.text
-    assert 'data-swapy-item="time"' in dashboard.text
+    for card_id in ("todo", "memo", "time", "habits"):
+        assert f'data-swapy-item="{card_id}"' in dashboard.text
 
 
 def test_corrupted_dashboard_setting_falls_back_without_breaking_page(client: TestClient):
@@ -153,9 +148,8 @@ def test_corrupted_dashboard_setting_falls_back_without_breaking_page(client: Te
     assert response.status_code == 200
     assert response.json()["persisted"] is False
     assert dashboard.status_code == 200
-    assert 'data-swapy-item="todo"' in dashboard.text
-    assert 'data-swapy-item="memo"' in dashboard.text
-    assert 'data-swapy-item="time"' in dashboard.text
+    for card_id in ("todo", "memo", "time", "habits"):
+        assert f'data-swapy-item="{card_id}"' in dashboard.text
 
 
 def test_unknown_json_setting_can_be_stored_for_future_extensions(client: TestClient):
