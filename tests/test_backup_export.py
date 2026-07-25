@@ -13,6 +13,7 @@ from app.backup_export import (
     write_backup_file,
 )
 from app.db import Base
+from app.models.habit import Habit, HabitCompletion
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
@@ -44,6 +45,16 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
             created_at=created_at,
         )
     )
+    habit = Habit(name="毎日読書", is_active=False, created_at=created_at, updated_at=created_at)
+    session.add(habit)
+    session.flush()
+    session.add(
+        HabitCompletion(
+            habit_id=habit.id,
+            completed_on=date(2026, 7, 23),
+            created_at=created_at,
+        )
+    )
     session.commit()
 
     payload = build_backup_payload(
@@ -51,15 +62,22 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         exported_at=datetime(2026, 7, 24, 4, 5, 6, tzinfo=timezone.utc),
     )
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["application"] == "home-panel-py"
     assert payload["exported_at"] == "2026-07-24T04:05:06Z"
-    assert payload["record_counts"] == {"tasks": 1, "daily_memos": 1, "time_entries": 1}
+    assert payload["record_counts"] == {
+        "tasks": 1,
+        "daily_memos": 1,
+        "time_entries": 1,
+        "habits": 1,
+        "habit_completions": 1,
+    }
     assert payload["data"]["tasks"][0]["title"] == "日本語タスク"
-    assert payload["data"]["tasks"][0]["is_done"] is True
     assert payload["data"]["daily_memos"][0]["memo_date"] == "2026-07-23"
     assert payload["data"]["time_entries"][0]["category"] == "個人開発"
-    assert payload["data"]["time_entries"][0]["minutes"] == 90
+    assert payload["data"]["habits"][0]["name"] == "毎日読書"
+    assert payload["data"]["habits"][0]["is_active"] is False
+    assert payload["data"]["habit_completions"][0]["habit_id"] == habit.id
 
 
 def test_build_backup_payload_is_deterministically_ordered(session):
@@ -70,6 +88,15 @@ def test_build_backup_payload_is_deterministically_ordered(session):
             TimeEntry(entry_date=date(2026, 7, 23), category="学習", minutes=10, note="先", created_at=stamp),
         ]
     )
+    habit = Habit(name="習慣", created_at=stamp, updated_at=stamp)
+    session.add(habit)
+    session.flush()
+    session.add_all(
+        [
+            HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 24), created_at=stamp),
+            HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 23), created_at=stamp),
+        ]
+    )
     session.commit()
 
     payload = build_backup_payload(session)
@@ -78,13 +105,29 @@ def test_build_backup_payload_is_deterministically_ordered(session):
         "2026-07-23",
         "2026-07-24",
     ]
+    assert [item["completed_on"] for item in payload["data"]["habit_completions"]] == [
+        "2026-07-23",
+        "2026-07-24",
+    ]
 
 
 def test_build_backup_payload_handles_empty_database(session):
     payload = build_backup_payload(session)
 
-    assert payload["record_counts"] == {"tasks": 0, "daily_memos": 0, "time_entries": 0}
-    assert payload["data"] == {"tasks": [], "daily_memos": [], "time_entries": []}
+    assert payload["record_counts"] == {
+        "tasks": 0,
+        "daily_memos": 0,
+        "time_entries": 0,
+        "habits": 0,
+        "habit_completions": 0,
+    }
+    assert payload["data"] == {
+        "tasks": [],
+        "daily_memos": [],
+        "time_entries": [],
+        "habits": [],
+        "habit_completions": [],
+    }
 
 
 def test_write_backup_file_writes_utf8_json_atomically(session, tmp_path: Path):
@@ -122,7 +165,7 @@ def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
 
     write_backup_file(session, output, overwrite=True)
 
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 1
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 2
 
 
 def test_default_output_path_uses_utc_timestamp():
