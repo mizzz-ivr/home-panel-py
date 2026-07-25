@@ -64,6 +64,46 @@
   color: #b91c1c;
 }
 
+.habit-summary {
+  margin: 4px 0 0;
+}
+
+.habit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.habit-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.habit-item.completed {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.habit-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.habit-main strong {
+  overflow-wrap: anywhere;
+}
+
+.habit-streak {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 13px;
+}
+
 @media (max-width: 640px) {
   .dashboard-card-options {
     grid-template-columns: 1fr;
@@ -71,5 +111,19 @@
 
   .dashboard-settings-actions > * {
     flex: 1 1 auto;
+  }
+
+  .habit-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .habit-item .actions > * {
+    flex: 1 1 auto;
+  }
+
+  .habit-item .actions button {
+    width: 100%;
   }
 }
