@@ -2,19 +2,27 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app import models  # noqa: F401
+from app.crud import app_setting as app_setting_crud
 from app.crud import memo as memo_crud
 from app.crud import task as task_crud
 from app.crud import time_entry as time_entry_crud
 from app.csv_export import build_time_entries_csv
+from app.dashboard_cards import (
+    DASHBOARD_PREFERENCES_KEY,
+    default_dashboard_preferences,
+    load_dashboard_preferences,
+    validate_dashboard_preferences,
+)
 from app.db import Base, engine, get_db
+from app.schemas.dashboard import DashboardPreferencesUpdate
 from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
@@ -34,6 +42,23 @@ def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+def get_dashboard_preferences(db: Session):
+    raw_preferences = app_setting_crud.get_json_setting(db, DASHBOARD_PREFERENCES_KEY)
+    return load_dashboard_preferences(raw_preferences)
+
+
+def dashboard_preferences_response(preferences) -> JSONResponse:
+    payload = preferences.to_dict()
+    payload["persisted"] = preferences.persisted
+    return JSONResponse(
+        payload,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 def render_dashboard(
     request: Request,
     db: Session,
@@ -46,6 +71,9 @@ def render_dashboard(
     entries = time_entry_crud.list_today_entries(db, today)
     total_minutes = time_entry_crud.get_today_total_minutes(db, today)
     category_totals = time_entry_crud.get_today_category_totals(db, today)
+    dashboard_preferences = get_dashboard_preferences(db)
+    dashboard_preferences_payload = dashboard_preferences.to_dict()
+    dashboard_preferences_payload["persisted"] = dashboard_preferences.persisted
 
     return templates.TemplateResponse(
         "dashboard.html",
@@ -58,6 +86,10 @@ def render_dashboard(
             "total_minutes": total_minutes,
             "category_totals": category_totals,
             "time_entry_categories": TIME_ENTRY_CATEGORIES,
+            "dashboard_preferences": dashboard_preferences,
+            "dashboard_preferences_payload": dashboard_preferences_payload,
+            "dashboard_all_cards": dashboard_preferences.ordered_cards(),
+            "dashboard_cards": dashboard_preferences.visible_cards(),
             "error_message": error_message,
         },
         status_code=status_code,
@@ -275,6 +307,35 @@ def parse_month(value: str) -> date | None:
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return render_dashboard(request, db)
+
+
+@app.get("/api/dashboard/preferences")
+def read_dashboard_preferences(db: Session = Depends(get_db)) -> JSONResponse:
+    return dashboard_preferences_response(get_dashboard_preferences(db))
+
+
+@app.put("/api/dashboard/preferences")
+def update_dashboard_preferences(
+    payload: DashboardPreferencesUpdate,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    try:
+        preferences = validate_dashboard_preferences(payload.order, payload.hidden)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    app_setting_crud.upsert_json_setting(
+        db,
+        DASHBOARD_PREFERENCES_KEY,
+        preferences.to_dict(),
+    )
+    return dashboard_preferences_response(preferences)
+
+
+@app.delete("/api/dashboard/preferences")
+def reset_dashboard_preferences(db: Session = Depends(get_db)) -> JSONResponse:
+    app_setting_crud.delete_setting(db, DASHBOARD_PREFERENCES_KEY)
+    return dashboard_preferences_response(default_dashboard_preferences())
 
 
 @app.get("/history", response_class=HTMLResponse)
