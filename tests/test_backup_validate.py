@@ -63,6 +63,34 @@ def valid_payload() -> dict:
     }
 
 
+def valid_v2_payload() -> dict:
+    payload = valid_payload()
+    payload["schema_version"] = 2
+    payload["record_counts"].update({"habits": 1, "habit_completions": 1})
+    payload["data"].update(
+        {
+            "habits": [
+                {
+                    "id": 1,
+                    "name": "毎日読書",
+                    "is_active": True,
+                    "created_at": "2026-07-24T09:00:00Z",
+                    "updated_at": "2026-07-24T09:00:00Z",
+                }
+            ],
+            "habit_completions": [
+                {
+                    "id": 1,
+                    "habit_id": 1,
+                    "completed_on": "2026-07-24",
+                    "created_at": "2026-07-24T11:00:00Z",
+                }
+            ],
+        }
+    )
+    return payload
+
+
 def write_payload(path: Path, payload: dict) -> str:
     content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     path.write_text(content, encoding="utf-8")
@@ -96,8 +124,9 @@ def test_exporter_generated_payload_is_valid(tmp_path: Path):
     assert validate_backup_payload(payload) == []
 
 
-def test_valid_payload_has_no_errors():
+def test_v1_and_v2_payloads_are_supported():
     assert validate_backup_payload(valid_payload()) == []
+    assert validate_backup_payload(valid_v2_payload()) == []
 
 
 def test_cli_accepts_valid_backup_and_prints_counts_and_sha256(tmp_path: Path, capsys):
@@ -111,6 +140,14 @@ def test_cli_accepts_valid_backup_and_prints_counts_and_sha256(tmp_path: Path, c
     assert "バックアップは有効です" in output
     assert "ToDo=1、メモ=1、時間記録=1" in output
     assert digest in output
+
+
+def test_cli_prints_habit_counts_for_v2(tmp_path: Path, capsys):
+    backup = tmp_path / "backup-v2.json"
+    write_payload(backup, valid_v2_payload())
+
+    assert run_cli([str(backup)]) == 0
+    assert "習慣=1、習慣達成=1" in capsys.readouterr().out
 
 
 def test_cli_accepts_matching_expected_sha256(tmp_path: Path):
@@ -200,7 +237,7 @@ def test_load_backup_file_returns_digest(tmp_path: Path):
 
 def test_validator_rejects_unsupported_schema_version():
     payload = valid_payload()
-    payload["schema_version"] = 2
+    payload["schema_version"] = 99
 
     errors = validate_backup_payload(payload)
 
@@ -252,9 +289,7 @@ def test_validator_rejects_invalid_task_fields(field: str, value, expected: str)
     payload = valid_payload()
     payload["data"]["tasks"][0][field] = value
 
-    errors = validate_backup_payload(payload)
-
-    assert any(expected in error for error in errors)
+    assert any(expected in error for error in validate_backup_payload(payload))
 
 
 @pytest.mark.parametrize(
@@ -269,9 +304,7 @@ def test_validator_rejects_invalid_memo_fields(field: str, value, expected: str)
     payload = valid_payload()
     payload["data"]["daily_memos"][0][field] = value
 
-    errors = validate_backup_payload(payload)
-
-    assert any(expected in error for error in errors)
+    assert any(expected in error for error in validate_backup_payload(payload))
 
 
 @pytest.mark.parametrize(
@@ -289,15 +322,34 @@ def test_validator_rejects_invalid_time_entry_fields(field: str, value, expected
     payload = valid_payload()
     payload["data"]["time_entries"][0][field] = value
 
+    assert any(expected in error for error in validate_backup_payload(payload))
+
+
+def test_validator_rejects_invalid_habit_and_completion_references():
+    payload = valid_v2_payload()
+    payload["data"]["habits"][0]["name"] = " "
+    payload["data"]["habit_completions"][0]["habit_id"] = 999
+
     errors = validate_backup_payload(payload)
 
-    assert any(expected in error for error in errors)
+    assert any("data.habits[0].name" in error and "空白だけ" in error for error in errors)
+    assert any("habitsに存在しないID" in error for error in errors)
+
+
+def test_validator_rejects_duplicate_habit_completion_day():
+    payload = valid_v2_payload()
+    duplicate = copy.deepcopy(payload["data"]["habit_completions"][0])
+    duplicate["id"] = 2
+    payload["data"]["habit_completions"].append(duplicate)
+    payload["record_counts"]["habit_completions"] = 2
+
+    errors = validate_backup_payload(payload)
+
+    assert any("同じ習慣・日付" in error for error in errors)
 
 
 def test_validator_reports_missing_data_array_without_crashing():
     payload = valid_payload()
     del payload["data"]["daily_memos"]
 
-    errors = validate_backup_payload(payload)
-
-    assert any("data.daily_memos" in error for error in errors)
+    assert any("data.daily_memos" in error for error in validate_backup_payload(payload))
