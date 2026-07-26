@@ -1,0 +1,37 @@
+from datetime import date, datetime
+
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base
+
+
+class Habit(Base):
+    __tablename__ = "habits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+
+class HabitCompletion(Base):
+    __tablename__ = "habit_completions"
+    __table_args__ = (
+        UniqueConstraint("habit_id", "completed_on", name="uq_habit_completion_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    habit_id: Mapped[int] = mapped_column(
+        ForeignKey("habits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    completed_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

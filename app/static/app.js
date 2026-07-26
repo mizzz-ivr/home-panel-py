@@ -174,8 +174,9 @@
         .sort(([left], [right]) => slotIndex(left) - slotIndex(right))
         .map(([, cardId]) => cardId);
       const isValidLegacyOrder =
-        legacyOrder.length === preferences.order.length &&
-        new Set(legacyOrder).size === preferences.order.length &&
+        legacyOrder.length > 0 &&
+        legacyOrder.length <= preferences.order.length &&
+        new Set(legacyOrder).size === legacyOrder.length &&
         legacyOrder.every((cardId) => preferences.order.includes(cardId));
 
       if (!isValidLegacyOrder) {
@@ -183,8 +184,12 @@
         return;
       }
 
-      const migrated = { order: legacyOrder, hidden: [] };
-      applyVisibleOrder(legacyOrder);
+      const migratedOrder = [
+        ...legacyOrder,
+        ...preferences.order.filter((cardId) => !legacyOrder.includes(cardId)),
+      ];
+      const migrated = { order: migratedOrder, hidden: [] };
+      applyVisibleOrder(migratedOrder);
       await savePreferences(migrated);
       removeLegacyLayout();
       announceLayout('ブラウザに保存されていたカード配置をサーバーへ移行しました。');

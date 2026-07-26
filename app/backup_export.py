@@ -14,12 +14,19 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.models.habit import Habit, HabitCompletion
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
 
-BACKUP_SCHEMA_VERSION = 1
-REQUIRED_TABLES = {"tasks", "daily_memos", "time_entries"}
+BACKUP_SCHEMA_VERSION = 2
+REQUIRED_TABLES = {
+    "tasks",
+    "daily_memos",
+    "time_entries",
+    "habits",
+    "habit_completions",
+}
 
 
 def format_datetime(value: datetime) -> str:
@@ -43,6 +50,16 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             )
         ).all()
     )
+    habits = list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
+    habit_completions = list(
+        db.scalars(
+            select(HabitCompletion).order_by(
+                HabitCompletion.completed_on.asc(),
+                HabitCompletion.habit_id.asc(),
+                HabitCompletion.id.asc(),
+            )
+        ).all()
+    )
 
     return {
         "schema_version": BACKUP_SCHEMA_VERSION,
@@ -52,6 +69,8 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             "tasks": len(tasks),
             "daily_memos": len(memos),
             "time_entries": len(entries),
+            "habits": len(habits),
+            "habit_completions": len(habit_completions),
         },
         "data": {
             "tasks": [
@@ -83,6 +102,25 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
                     "created_at": format_datetime(entry.created_at),
                 }
                 for entry in entries
+            ],
+            "habits": [
+                {
+                    "id": habit.id,
+                    "name": habit.name,
+                    "is_active": habit.is_active,
+                    "created_at": format_datetime(habit.created_at),
+                    "updated_at": format_datetime(habit.updated_at),
+                }
+                for habit in habits
+            ],
+            "habit_completions": [
+                {
+                    "id": completion.id,
+                    "habit_id": completion.habit_id,
+                    "completed_on": completion.completed_on.isoformat(),
+                    "created_at": format_datetime(completion.created_at),
+                }
+                for completion in habit_completions
             ],
         },
     }

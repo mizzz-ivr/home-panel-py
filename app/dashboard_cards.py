@@ -17,6 +17,7 @@ DASHBOARD_CARDS = (
     DashboardCardDefinition("todo", "ToDo", "cards/todo.html"),
     DashboardCardDefinition("memo", "今日のメモ", "cards/memo.html"),
     DashboardCardDefinition("time", "学習/作業時間", "cards/time.html"),
+    DashboardCardDefinition("habits", "習慣トラッカー", "cards/habits.html"),
 )
 DASHBOARD_CARD_BY_ID = {card.card_id: card for card in DASHBOARD_CARDS}
 DEFAULT_DASHBOARD_ORDER = tuple(card.card_id for card in DASHBOARD_CARDS)
@@ -77,11 +78,30 @@ def load_dashboard_preferences(raw_value: Any) -> DashboardPreferences:
     if type(raw_value) is not dict:
         return default_dashboard_preferences()
 
-    try:
-        return validate_dashboard_preferences(
-            raw_value.get("order"),
-            raw_value.get("hidden", []),
-            persisted=True,
-        )
-    except ValueError:
+    raw_order = raw_value.get("order")
+    raw_hidden = raw_value.get("hidden", [])
+    if type(raw_order) is not list or any(type(card_id) is not str for card_id in raw_order):
         return default_dashboard_preferences()
+    if type(raw_hidden) is not list or any(type(card_id) is not str for card_id in raw_hidden):
+        return default_dashboard_preferences()
+
+    known_ids = set(DEFAULT_DASHBOARD_ORDER)
+    normalized_order: list[str] = []
+    seen: set[str] = set()
+    for card_id in raw_order:
+        if card_id in known_ids and card_id not in seen:
+            normalized_order.append(card_id)
+            seen.add(card_id)
+    normalized_order.extend(card_id for card_id in DEFAULT_DASHBOARD_ORDER if card_id not in seen)
+
+    normalized_hidden = {
+        card_id for card_id in raw_hidden if card_id in known_ids
+    }
+    if len(normalized_hidden) >= len(known_ids):
+        normalized_hidden = set()
+
+    return DashboardPreferences(
+        tuple(normalized_order),
+        frozenset(normalized_hidden),
+        persisted=True,
+    )

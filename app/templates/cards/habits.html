@@ -1,0 +1,60 @@
+<section class="card dashboard-card" data-swapy-item="habits">
+  <div class="card-heading">
+    <div>
+      <h2>習慣トラッカー</h2>
+      <p class="hint habit-summary">今日の達成: {{ habit_completed_today }}/{{ habit_total }}件</p>
+    </div>
+    <button
+      type="button"
+      class="drag-handle"
+      data-swapy-handle
+      aria-label="習慣トラッカーカードを並び替え"
+      title="ドラッグして並び替え"
+    >
+      <span aria-hidden="true">⠿</span>
+      <span>並び替え</span>
+    </button>
+  </div>
+
+  <form action="/habits" method="post" class="inline-form">
+    <label for="habit-name" class="sr-only">習慣名</label>
+    <input
+      id="habit-name"
+      type="text"
+      name="name"
+      maxlength="100"
+      placeholder="例: 30分読書"
+      required
+    />
+    <button type="submit">追加</button>
+  </form>
+
+  <ul class="list habit-list">
+    {% for item in habit_items %}
+    <li class="habit-item {% if item.completed_today %}completed{% endif %}">
+      <div class="habit-main">
+        <strong>{{ item.habit.name }}</strong>
+        <span class="habit-streak">
+          {% if item.current_streak > 0 %}{{ item.current_streak }}日継続{% else %}今日から開始{% endif %}
+        </span>
+      </div>
+      <div class="actions">
+        <form action="/habits/{{ item.habit.id }}/toggle-today" method="post">
+          <button type="submit" class="{% if item.completed_today %}secondary-button{% endif %}">
+            {% if item.completed_today %}取り消す{% else %}達成{% endif %}
+          </button>
+        </form>
+        <form action="/habits/{{ item.habit.id }}/archive" method="post">
+          <button type="submit" class="secondary-button">終了</button>
+        </form>
+      </div>
+    </li>
+    {% else %}
+    <li class="empty-state">習慣はまだありません。</li>
+    {% endfor %}
+  </ul>
+
+  {% if habit_total >= habit_max_active %}
+  <p class="hint">表示負荷を抑えるため、アクティブな習慣は最大{{ habit_max_active }}件です。</p>
+  {% endif %}
+</section>
