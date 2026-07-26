@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Any
 
@@ -10,7 +11,7 @@ from app.crud import habit as habit_crud
 from app.models.habit import Habit
 
 
-def daterange(start_date: date, end_date: date):
+def daterange(start_date: date, end_date: date) -> Iterator[date]:
     current = start_date
     while current <= end_date:
         yield current
@@ -63,7 +64,9 @@ def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
         )
 
     expected_count = sum(1 for item in items if item["was_active"])
-    completed_count = sum(1 for item in items if item["completed"])
+    completed_count = sum(
+        1 for item in items if item["was_active"] and item["completed"]
+    )
     achievement_rate = round(completed_count / expected_count * 100) if expected_count else 0
 
     return {
