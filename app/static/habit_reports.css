@@ -1,0 +1,186 @@
+.habit-report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.habit-report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.habit-report-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habit-report-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.habit-report-item-header,
+.habit-report-item-meta,
+.habit-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.habit-report-item-meta {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.habit-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.habit-status.completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.habit-status.missed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.habit-status.future {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.habit-progress-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.habit-progress-bar {
+  display: block;
+  width: var(--habit-rate, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  color: #2563eb;
+}
+
+.habit-day-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habit-day {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+}
+
+.habit-day.future {
+  opacity: 0.65;
+  background: #f8fafc;
+}
+
+.habit-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.habit-calendar-weekday {
+  padding: 6px;
+  text-align: center;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.habit-calendar-day {
+  min-height: 112px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.habit-calendar-day.today {
+  border-width: 2px;
+  border-color: #2563eb;
+}
+
+.habit-calendar-day.future {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.habit-calendar-day-number {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.habit-calendar-day strong {
+  font-size: 0.95rem;
+}
+
+.habit-calendar-spacer {
+  min-height: 1px;
+}
+
+@media (max-width: 800px) {
+  .habit-report-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .habit-calendar {
+    gap: 4px;
+  }
+
+  .habit-calendar-day {
+    min-height: 88px;
+    padding: 6px;
+  }
+
+  .habit-calendar-day .habit-progress-track,
+  .habit-calendar-day .habit-calendar-detail {
+    display: none;
+  }
+
+  .habit-calendar-day-number {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
