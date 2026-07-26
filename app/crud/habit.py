@@ -22,6 +22,34 @@ def list_active_habits(db: Session) -> list[Habit]:
     )
 
 
+def list_all_habits(db: Session) -> list[Habit]:
+    return list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
+
+
+def list_completions_between(
+    db: Session,
+    start_date: date,
+    end_date: date,
+) -> list[HabitCompletion]:
+    if end_date < start_date:
+        return []
+
+    return list(
+        db.scalars(
+            select(HabitCompletion)
+            .where(
+                HabitCompletion.completed_on >= start_date,
+                HabitCompletion.completed_on <= end_date,
+            )
+            .order_by(
+                HabitCompletion.completed_on.asc(),
+                HabitCompletion.habit_id.asc(),
+                HabitCompletion.id.asc(),
+            )
+        ).all()
+    )
+
+
 def count_active_habits(db: Session) -> int:
     return int(
         db.scalar(select(func.count(Habit.id)).where(Habit.is_active.is_(True))) or 0
