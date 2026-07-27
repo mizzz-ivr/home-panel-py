@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -18,6 +18,16 @@ def list_active_habits(db: Session) -> list[Habit]:
             select(Habit)
             .where(Habit.is_active.is_(True))
             .order_by(Habit.created_at.asc(), Habit.id.asc())
+        ).all()
+    )
+
+
+def list_archived_habits(db: Session) -> list[Habit]:
+    return list(
+        db.scalars(
+            select(Habit)
+            .where(Habit.is_active.is_(False))
+            .order_by(Habit.archived_at.desc(), Habit.id.desc())
         ).all()
     )
 
@@ -56,9 +66,16 @@ def count_active_habits(db: Session) -> int:
     )
 
 
-def find_active_habit_by_name(db: Session, name: str) -> Habit | None:
+def find_active_habit_by_name(
+    db: Session,
+    name: str,
+    *,
+    exclude_habit_id: int | None = None,
+) -> Habit | None:
     normalized = name.casefold()
     for habit in list_active_habits(db):
+        if exclude_habit_id is not None and habit.id == exclude_habit_id:
+            continue
         if habit.name.casefold() == normalized:
             return habit
     return None
@@ -72,10 +89,25 @@ def create_habit(db: Session, name: str) -> Habit:
     return habit
 
 
+def get_habit(db: Session, habit_id: int) -> Habit | None:
+    return db.get(Habit, habit_id)
+
+
 def get_active_habit(db: Session, habit_id: int) -> Habit | None:
     return db.scalar(
         select(Habit).where(Habit.id == habit_id, Habit.is_active.is_(True))
     )
+
+
+def rename_habit(db: Session, habit_id: int, name: str) -> Habit | None:
+    habit = get_habit(db, habit_id)
+    if habit is None:
+        return None
+
+    habit.name = name
+    db.commit()
+    db.refresh(habit)
+    return habit
 
 
 def toggle_today_completion(db: Session, habit_id: int, target_date: date) -> bool | None:
@@ -106,6 +138,18 @@ def archive_habit(db: Session, habit_id: int) -> bool:
         return False
 
     habit.is_active = False
+    habit.archived_at = datetime.utcnow()
+    db.commit()
+    return True
+
+
+def restore_habit(db: Session, habit_id: int) -> bool:
+    habit = get_habit(db, habit_id)
+    if habit is None or habit.is_active:
+        return False
+
+    habit.is_active = True
+    habit.archived_at = None
     db.commit()
     return True
 
