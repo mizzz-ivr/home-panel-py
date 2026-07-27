@@ -4,13 +4,16 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.crud import habit as habit_crud
 from app.db import get_db
 from app.habit_report import build_daily_report, build_period_report
+from app.schemas.habit import HabitCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -59,6 +62,26 @@ def get_previous_month_start(month_start: date) -> date | None:
 
 def get_month_end(month_start: date) -> date:
     return get_next_month_start(month_start) - timedelta(days=1)
+
+
+def render_habit_management(
+    request: Request,
+    db: Session,
+    error_message: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "habit_manage.html",
+        {
+            "request": request,
+            "active_habits": habit_crud.list_active_habits(db),
+            "archived_habits": habit_crud.list_archived_habits(db),
+            "active_count": habit_crud.count_active_habits(db),
+            "max_active": habit_crud.MAX_ACTIVE_HABITS,
+            "error_message": error_message,
+        },
+        status_code=status_code,
+    )
 
 
 def render_daily_report(
@@ -154,6 +177,90 @@ def render_monthly_report(
         },
         status_code=status_code,
     )
+
+
+@router.get("/manage", response_class=HTMLResponse)
+def habit_management(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    return render_habit_management(request, db)
+
+
+@router.post("/{habit_id}/rename")
+def rename_habit(
+    request: Request,
+    habit_id: int,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    habit = habit_crud.get_habit(db, habit_id)
+    if habit is None:
+        return render_habit_management(
+            request,
+            db,
+            "指定された習慣が存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        payload = HabitCreate(name=name)
+    except ValidationError:
+        return render_habit_management(
+            request,
+            db,
+            "習慣名は1〜100文字で入力してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    duplicate = habit_crud.find_active_habit_by_name(
+        db,
+        payload.name,
+        exclude_habit_id=habit_id,
+    )
+    if duplicate is not None:
+        return render_habit_management(
+            request,
+            db,
+            "同じ名前のアクティブな習慣が既にあります。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    habit_crud.rename_habit(db, habit_id, payload.name)
+    return RedirectResponse(url="/habits/manage", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{habit_id}/restore")
+def restore_habit(
+    request: Request,
+    habit_id: int,
+    db: Session = Depends(get_db),
+):
+    habit = habit_crud.get_habit(db, habit_id)
+    if habit is None or habit.is_active:
+        return render_habit_management(
+            request,
+            db,
+            "指定された習慣が存在しないか、既に再開されています。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if habit_crud.count_active_habits(db) >= habit_crud.MAX_ACTIVE_HABITS:
+        return render_habit_management(
+            request,
+            db,
+            f"アクティブな習慣は最大{habit_crud.MAX_ACTIVE_HABITS}件です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if habit_crud.find_active_habit_by_name(db, habit.name) is not None:
+        return render_habit_management(
+            request,
+            db,
+            "同じ名前のアクティブな習慣があるため再開できません。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    habit_crud.restore_habit(db, habit_id)
+    return RedirectResponse(url="/habits/manage", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/history", response_class=HTMLResponse)

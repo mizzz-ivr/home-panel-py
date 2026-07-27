@@ -1,0 +1,91 @@
+.habit-management-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.habit-management-list {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habit-management-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.8rem;
+  background: #f9fafb;
+}
+
+.habit-management-item.archived {
+  opacity: 0.9;
+}
+
+.habit-rename-form {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.habit-rename-form label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.habit-management-meta,
+.habit-management-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.habit-management-footer {
+  justify-content: space-between;
+}
+
+.habit-management-meta {
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.status-badge.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.archived {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+@media (max-width: 640px) {
+  .habit-management-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .habit-management-item .inline-form,
+  .habit-management-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .habit-management-item .inline-form > *,
+  .habit-management-footer form,
+  .habit-management-footer button {
+    width: 100%;
+  }
+}

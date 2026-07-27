@@ -14,12 +14,13 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.migrations import migrate_habit_archived_at
 from app.models.habit import Habit, HabitCompletion
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
 
-BACKUP_SCHEMA_VERSION = 2
+BACKUP_SCHEMA_VERSION = 3
 REQUIRED_TABLES = {
     "tasks",
     "daily_memos",
@@ -35,6 +36,10 @@ def format_datetime(value: datetime) -> str:
     else:
         value = value.astimezone(timezone.utc)
     return value.isoformat().replace("+00:00", "Z")
+
+
+def format_optional_datetime(value: datetime | None) -> str | None:
+    return format_datetime(value) if value is not None else None
 
 
 def build_backup_payload(db: Session, exported_at: datetime | None = None) -> dict[str, Any]:
@@ -108,6 +113,7 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
                     "id": habit.id,
                     "name": habit.name,
                     "is_active": habit.is_active,
+                    "archived_at": format_optional_datetime(habit.archived_at),
                     "created_at": format_datetime(habit.created_at),
                     "updated_at": format_datetime(habit.updated_at),
                 }
@@ -209,6 +215,8 @@ def run_cli(args: Sequence[str] | None = None) -> int:
     )
     try:
         missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
+        if not missing_tables:
+            migrate_habit_archived_at(engine)
     except SQLAlchemyError as exc:
         print(f"バックアップ対象のDBを確認できません: {exc}", file=sys.stderr)
         engine.dispose()

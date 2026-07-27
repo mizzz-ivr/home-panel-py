@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.backup_export import (
@@ -34,6 +34,7 @@ def session(tmp_path: Path):
 
 def test_build_backup_payload_contains_all_tables_and_counts(session):
     created_at = datetime(2026, 7, 24, 1, 2, 3)
+    archived_at = datetime(2026, 7, 24, 3, 0, 0)
     session.add(Task(title="日本語タスク", is_done=True, created_at=created_at, updated_at=created_at))
     session.add(DailyMemo(memo_date=date(2026, 7, 23), content="メモ内容", updated_at=created_at))
     session.add(
@@ -45,7 +46,13 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
             created_at=created_at,
         )
     )
-    habit = Habit(name="毎日読書", is_active=False, created_at=created_at, updated_at=created_at)
+    habit = Habit(
+        name="毎日読書",
+        is_active=False,
+        archived_at=archived_at,
+        created_at=created_at,
+        updated_at=archived_at,
+    )
     session.add(habit)
     session.flush()
     session.add(
@@ -62,7 +69,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         exported_at=datetime(2026, 7, 24, 4, 5, 6, tzinfo=timezone.utc),
     )
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["application"] == "home-panel-py"
     assert payload["exported_at"] == "2026-07-24T04:05:06Z"
     assert payload["record_counts"] == {
@@ -77,6 +84,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
     assert payload["data"]["time_entries"][0]["category"] == "個人開発"
     assert payload["data"]["habits"][0]["name"] == "毎日読書"
     assert payload["data"]["habits"][0]["is_active"] is False
+    assert payload["data"]["habits"][0]["archived_at"] == "2026-07-24T03:00:00Z"
     assert payload["data"]["habit_completions"][0]["habit_id"] == habit.id
 
 
@@ -109,6 +117,7 @@ def test_build_backup_payload_is_deterministically_ordered(session):
         "2026-07-23",
         "2026-07-24",
     ]
+    assert payload["data"]["habits"][0]["archived_at"] is None
 
 
 def test_build_backup_payload_handles_empty_database(session):
@@ -165,7 +174,7 @@ def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
 
     write_backup_file(session, output, overwrite=True)
 
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 2
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 3
 
 
 def test_default_output_path_uses_utc_timestamp():
@@ -234,3 +243,22 @@ def test_run_cli_creates_backup_from_specified_database(tmp_path: Path, capsys):
     assert output.exists()
     assert json.loads(output.read_text(encoding="utf-8"))["data"]["tasks"][0]["title"] == "CLIタスク"
     assert "バックアップを作成しました" in capsys.readouterr().out
+
+
+def test_run_cli_migrates_legacy_habits_before_export(tmp_path: Path):
+    database = tmp_path / "legacy.db"
+    engine = create_engine(f"sqlite:///{database}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title VARCHAR(255) NOT NULL, is_done BOOLEAN NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"))
+        connection.execute(text("CREATE TABLE daily_memos (id INTEGER PRIMARY KEY, memo_date DATE NOT NULL, content TEXT NOT NULL, updated_at DATETIME NOT NULL)"))
+        connection.execute(text("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, entry_date DATE NOT NULL, category VARCHAR(20) NOT NULL, minutes INTEGER NOT NULL, note VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)"))
+        connection.execute(text("CREATE TABLE habits (id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL, is_active BOOLEAN NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"))
+        connection.execute(text("CREATE TABLE habit_completions (id INTEGER PRIMARY KEY, habit_id INTEGER NOT NULL, completed_on DATE NOT NULL, created_at DATETIME NOT NULL)"))
+        connection.execute(text("INSERT INTO habits VALUES (1, '旧習慣', 0, '2026-07-01 00:00:00', '2026-07-10 00:00:00')"))
+    engine.dispose()
+    output = tmp_path / "legacy-backup.json"
+
+    assert run_cli(["--database", str(database), "--output", str(output)]) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 3
+    assert payload["data"]["habits"][0]["archived_at"] == "2026-07-10T00:00:00Z"
