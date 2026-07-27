@@ -29,7 +29,7 @@ def is_habit_active_on(
     target_date: date,
     periods: Sequence[HabitActivePeriod] | None = None,
 ) -> bool:
-    if periods is not None:
+    if periods:
         return any(is_period_active_on(period, target_date) for period in periods)
 
     created_on = habit.created_at.date()
@@ -78,7 +78,7 @@ def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
         was_active = is_habit_active_on(
             habit,
             selected_date,
-            periods_by_habit.get(habit.id, ()),
+            periods_by_habit.get(habit.id),
         )
         was_completed = habit.id in completed_ids
         if not was_active and not was_completed:
@@ -148,7 +148,7 @@ def build_period_report(
             if is_habit_active_on(
                 habit,
                 target_date,
-                periods_by_habit.get(habit.id, ()),
+                periods_by_habit.get(habit.id),
             )
         }
         completed_count = len(completion_ids_by_date[target_date] & active_ids)
@@ -173,7 +173,7 @@ def build_period_report(
 
     habit_summaries: list[dict[str, Any]] = []
     for habit in habits:
-        habit_periods = periods_by_habit.get(habit.id, ())
+        habit_periods = periods_by_habit.get(habit.id)
         expected_dates = {
             target_date
             for target_date in daterange(start_date, effective_end)
@@ -202,7 +202,7 @@ def build_period_report(
                 if effective_end >= start_date
                 else 0,
                 "is_archived": not habit.is_active,
-                "active_period_count": len(habit_periods),
+                "active_period_count": len(habit_periods or ()),
             }
         )
 
