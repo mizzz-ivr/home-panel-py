@@ -24,7 +24,9 @@ def is_habit_active_on(habit: Habit, target_date: date) -> bool:
         return False
     if habit.is_active:
         return True
-    return target_date <= habit.updated_at.date()
+
+    archived_at = habit.archived_at or habit.updated_at
+    return target_date <= archived_at.date()
 
 
 def calculate_longest_streak(
