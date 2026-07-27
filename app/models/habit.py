@@ -1,6 +1,15 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -20,6 +29,27 @@ class Habit(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+
+
+class HabitActivePeriod(Base):
+    __tablename__ = "habit_active_periods"
+    __table_args__ = (
+        UniqueConstraint("habit_id", "started_on", name="uq_habit_active_period_start"),
+        CheckConstraint(
+            "ended_on IS NULL OR ended_on >= started_on",
+            name="ck_habit_active_period_dates",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    habit_id: Mapped[int] = mapped_column(
+        ForeignKey("habits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    started_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    ended_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class HabitCompletion(Base):
