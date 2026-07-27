@@ -14,10 +14,11 @@ from app.backup_export import BACKUP_SCHEMA_VERSION
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES
 
 BACKUP_APPLICATION = "home-panel-py"
-SUPPORTED_BACKUP_SCHEMA_VERSIONS = (1, BACKUP_SCHEMA_VERSION)
+SUPPORTED_BACKUP_SCHEMA_VERSIONS = tuple(range(1, BACKUP_SCHEMA_VERSION + 1))
 BACKUP_TABLES_BY_VERSION = {
     1: ("tasks", "daily_memos", "time_entries"),
     2: ("tasks", "daily_memos", "time_entries", "habits", "habit_completions"),
+    3: ("tasks", "daily_memos", "time_entries", "habits", "habit_completions"),
 }
 MAX_BACKUP_FILE_SIZE = 50 * 1024 * 1024
 MAX_VALIDATION_ERRORS = 100
@@ -163,6 +164,16 @@ def validate_utc_datetime_string(
     return parsed
 
 
+def validate_nullable_utc_datetime_string(
+    value: Any,
+    path: str,
+    errors: ErrorCollector,
+) -> datetime | None:
+    if value is None:
+        return None
+    return validate_utc_datetime_string(value, path, errors)
+
+
 def validate_task(record: Any, index: int, errors: ErrorCollector) -> int | None:
     path = f"data.tasks[{index}]"
     if type(record) is not dict:
@@ -215,7 +226,7 @@ def validate_time_entry(record: Any, index: int, errors: ErrorCollector) -> int 
     return entry_id
 
 
-def validate_habit(record: Any, index: int, errors: ErrorCollector) -> int | None:
+def validate_habit_v2(record: Any, index: int, errors: ErrorCollector) -> int | None:
     path = f"data.habits[{index}]"
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
@@ -230,6 +241,45 @@ def validate_habit(record: Any, index: int, errors: ErrorCollector) -> int | Non
     updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
     if created_at is not None and updated_at is not None and updated_at < created_at:
         errors.add(f"{path}.updated_at: created_at以降である必要があります。")
+    return habit_id
+
+
+def validate_habit_v3(record: Any, index: int, errors: ErrorCollector) -> int | None:
+    path = f"data.habits[{index}]"
+    if type(record) is not dict:
+        errors.add(f"{path}: オブジェクトである必要があります。")
+        return None
+
+    validate_exact_keys(
+        record,
+        {"id", "name", "is_active", "archived_at", "created_at", "updated_at"},
+        path,
+        errors,
+    )
+    habit_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
+    validate_string(record.get("name"), f"{path}.name", errors, min_length=1, max_length=100, disallow_blank=True)
+    is_active = record.get("is_active")
+    if type(is_active) is not bool:
+        errors.add(f"{path}.is_active: 真偽値である必要があります。")
+
+    created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    archived_at = validate_nullable_utc_datetime_string(
+        record.get("archived_at"),
+        f"{path}.archived_at",
+        errors,
+    )
+
+    if created_at is not None and updated_at is not None and updated_at < created_at:
+        errors.add(f"{path}.updated_at: created_at以降である必要があります。")
+    if is_active is True and record.get("archived_at") is not None:
+        errors.add(f"{path}.archived_at: アクティブな習慣ではnullである必要があります。")
+    if is_active is False and record.get("archived_at") is None:
+        errors.add(f"{path}.archived_at: 終了済み習慣では必須です。")
+    if created_at is not None and archived_at is not None and archived_at < created_at:
+        errors.add(f"{path}.archived_at: created_at以降である必要があります。")
+    if updated_at is not None and archived_at is not None and updated_at < archived_at:
+        errors.add(f"{path}.updated_at: archived_at以降である必要があります。")
     return habit_id
 
 
@@ -324,11 +374,12 @@ def validate_backup_payload(payload: Any) -> list[str]:
         return errors.result()
     validate_exact_keys(data, set(table_names), "data", errors)
 
+    habit_validator = validate_habit_v3 if schema_version >= 3 else validate_habit_v2
     validators = {
         "tasks": validate_task,
         "daily_memos": validate_daily_memo,
         "time_entries": validate_time_entry,
-        "habits": validate_habit,
+        "habits": habit_validator,
         "habit_completions": validate_habit_completion,
     }
     ids_by_table: dict[str, set[int]] = {}
