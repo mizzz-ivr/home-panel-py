@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>習慣の日別履歴 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/habit_reports.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>Home Panel</h1>
+          <p>習慣の日別履歴</p>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+          <a href="/habits/weekly" class="button-link secondary-button">週次集計</a>
+          <a href="/habits/monthly" class="button-link secondary-button">月次集計</a>
+        </div>
+      </header>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      <section class="card history-controls" aria-labelledby="habit-history-date-heading">
+        <div class="card-heading">
+          <h2 id="habit-history-date-heading">表示する日</h2>
+        </div>
+        <form action="/habits/history" method="get" class="history-filter">
+          <label for="target-date">日付</label>
+          <div class="inline-form">
+            <input
+              id="target-date"
+              type="date"
+              name="target_date"
+              value="{{ selected_date.isoformat() }}"
+              max="{{ today.isoformat() }}"
+              required
+            />
+            <button type="submit">表示</button>
+          </div>
+        </form>
+        <nav class="history-navigation" aria-label="日付を移動">
+          {% if previous_date %}
+          <a href="/habits/history?target_date={{ previous_date.isoformat() }}" class="button-link secondary-button">前の日</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">前の日</span>
+          {% endif %}
+          {% if next_date %}
+          <a href="/habits/history?target_date={{ next_date.isoformat() }}" class="button-link secondary-button">次の日</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">次の日</span>
+          {% endif %}
+        </nav>
+      </section>
+
+      <section class="habit-report-summary" aria-label="選択日の概要">
+        <div class="card history-metric">
+          <span>対象日</span>
+          <strong>{{ selected_date.strftime('%Y年%m月%d日') }}</strong>
+        </div>
+        <div class="card history-metric">
+          <span>達成数</span>
+          <strong>{{ completed_count }}/{{ expected_count }}件</strong>
+        </div>
+        <div class="card history-metric">
+          <span>達成率</span>
+          <strong>{{ achievement_rate }}%</strong>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="habit-history-list-heading">
+        <div class="card-heading">
+          <h2 id="habit-history-list-heading">習慣ごとの結果</h2>
+        </div>
+        <ul class="habit-report-list">
+          {% for item in items %}
+          <li class="habit-report-item">
+            <div class="habit-report-item-header">
+              <strong>{{ item.habit.name }}</strong>
+              {% if item.completed %}
+              <span class="habit-status completed">達成</span>
+              {% else %}
+              <span class="habit-status missed">未達成</span>
+              {% endif %}
+            </div>
+            <div class="habit-report-item-meta">
+              <span>{% if item.was_active %}この日の対象{% else %}達成記録のみ{% endif %}</span>
+              {% if item.is_archived %}<span>終了済み</span>{% endif %}
+            </div>
+          </li>
+          {% else %}
+          <li class="empty-state">この日に対象となる習慣はありません。</li>
+          {% endfor %}
+        </ul>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

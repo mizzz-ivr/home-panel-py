@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>習慣の月次集計 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/habit_reports.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>Home Panel</h1>
+          <p>習慣の月次集計</p>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+          <a href="/habits/history" class="button-link secondary-button">日別履歴</a>
+          <a href="/habits/weekly" class="button-link secondary-button">週次集計</a>
+        </div>
+      </header>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      <section class="card history-controls" aria-labelledby="habit-monthly-date-heading">
+        <div class="card-heading">
+          <h2 id="habit-monthly-date-heading">表示する月</h2>
+        </div>
+        <form action="/habits/monthly" method="get" class="history-filter">
+          <label for="target-month">月</label>
+          <div class="inline-form">
+            <input
+              id="target-month"
+              type="month"
+              name="target_month"
+              value="{{ month_start.strftime('%Y-%m') }}"
+              max="{{ today.strftime('%Y-%m') }}"
+              required
+            />
+            <button type="submit">表示</button>
+          </div>
+        </form>
+        <nav class="history-navigation" aria-label="月を移動">
+          {% if previous_month_start %}
+          <a href="/habits/monthly?target_month={{ previous_month_start.strftime('%Y-%m') }}" class="button-link secondary-button">前の月</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">前の月</span>
+          {% endif %}
+          {% if next_month_start %}
+          <a href="/habits/monthly?target_month={{ next_month_start.strftime('%Y-%m') }}" class="button-link secondary-button">次の月</a>
+          {% else %}
+          <span class="button-link disabled-button" aria-disabled="true">次の月</span>
+          {% endif %}
+        </nav>
+      </section>
+
+      <section class="habit-report-summary" aria-label="選択月の概要">
+        <div class="card history-metric">
+          <span>対象月</span>
+          <strong>{{ month_start.strftime('%Y年%m月') }}</strong>
+          {% if effective_end < month_end %}<small>集計は{{ effective_end.strftime('%m月%d日') }}まで</small>{% endif %}
+        </div>
+        <div class="card history-metric">
+          <span>達成数</span>
+          <strong>{{ total_completed }}/{{ total_expected }}件</strong>
+        </div>
+        <div class="card history-metric">
+          <span>達成率</span>
+          <strong>{{ achievement_rate }}%</strong>
+        </div>
+        <div class="card history-metric">
+          <span>全習慣達成日</span>
+          <strong>{{ perfect_days }}日</strong>
+        </div>
+      </section>
+
+      <div class="habit-report-grid">
+        <section class="card" aria-labelledby="habit-monthly-calendar-heading">
+          <div class="card-heading">
+            <h2 id="habit-monthly-calendar-heading">日別カレンダー</h2>
+          </div>
+          <div class="habit-calendar" role="grid" aria-label="{{ month_start.strftime('%Y年%m月') }}の習慣達成状況">
+            {% for label in weekday_labels %}
+            <div class="habit-calendar-weekday" role="columnheader">{{ label }}</div>
+            {% endfor %}
+            {% for _ in range(leading_blank_days) %}
+            <div class="habit-calendar-spacer" aria-hidden="true"></div>
+            {% endfor %}
+            {% for summary in daily_summaries %}
+            <article
+              class="habit-calendar-day {% if summary.is_future %}future{% endif %} {% if summary.date == today %}today{% endif %}"
+              role="gridcell"
+              aria-label="{{ summary.date.strftime('%Y年%m月%d日') }} {% if summary.is_future %}未到来{% else %}{{ summary.completed_count }}/{{ summary.expected_count }}件、達成率{{ summary.achievement_rate }}%{% endif %}"
+            >
+              <div class="habit-calendar-day-number">
+                {% if summary.is_future %}
+                <strong>{{ summary.date.day }}</strong>
+                <span class="habit-status future">未到来</span>
+                {% else %}
+                <a href="/habits/history?target_date={{ summary.date.isoformat() }}">{{ summary.date.day }}</a>
+                <strong>{{ summary.completed_count }}/{{ summary.expected_count }}</strong>
+                {% endif %}
+              </div>
+              {% if not summary.is_future %}
+              <div class="habit-progress-track" aria-hidden="true">
+                <span class="habit-progress-bar" style="--habit-rate: {{ summary.achievement_rate }}%"></span>
+              </div>
+              <span class="entry-category habit-calendar-detail">{{ summary.achievement_rate }}%</span>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="habit-monthly-breakdown-heading">
+          <div class="card-heading">
+            <h2 id="habit-monthly-breakdown-heading">習慣別集計</h2>
+          </div>
+          <ul class="habit-report-list">
+            {% for summary in habit_summaries %}
+            <li class="habit-report-item">
+              <div class="habit-report-item-header">
+                <strong>{{ summary.habit.name }}</strong>
+                <span class="habit-status {% if summary.achievement_rate == 100 %}completed{% endif %}">{{ summary.achievement_rate }}%</span>
+              </div>
+              <div class="habit-progress-track" aria-label="達成率 {{ summary.achievement_rate }}%">
+                <span class="habit-progress-bar" style="--habit-rate: {{ summary.achievement_rate }}%"></span>
+              </div>
+              <div class="habit-report-item-meta">
+                <span>{{ summary.completed_days }}/{{ summary.expected_days }}日達成</span>
+                <span>最長{{ summary.longest_streak }}日連続</span>
+                {% if summary.is_archived %}<span>終了済み</span>{% endif %}
+              </div>
+            </li>
+            {% else %}
+            <li class="empty-state">この月に対象となる習慣はありません。</li>
+            {% endfor %}
+          </ul>
+        </section>
+      </div>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -39,18 +39,34 @@
 - 現在の連続達成日数
 - 履歴を残したまま習慣を終了
 - アクティブ習慣は最大20件
+- 習慣の日別履歴
+- 習慣の週次・月次達成率
+- 全習慣達成日と習慣別最長連続日数
 
-詳細は[`HABITS.md`](./HABITS.md)を参照してください。
+詳細は[`HABITS.md`](./HABITS.md)と[`HABIT_REPORTS.md`](./HABIT_REPORTS.md)を参照してください。
 
 ### 履歴・集計
+
+時間記録・メモ:
 
 - 日付を指定した日別履歴
 - 月曜始まりの週次集計
 - 月間カレンダー形式の月次集計
 - 合計時間・記録件数・記録日数・カテゴリ別合計
-- 未来日・不正日付の拒否
 
-現時点の履歴・週次・月次集計はメモと時間記録が対象です。習慣の履歴集計は今後の拡張対象です。
+習慣:
+
+- 日別の達成・未達成
+- 週次・月次の達成数・対象件数・達成率
+- 日別カレンダー
+- 全対象習慣を達成した日数
+- 習慣別達成日数・最長連続日数
+- 作成日・終了日を考慮した有効期間集計
+
+共通:
+
+- 未来日・不正日付・不正月の拒否
+- 読み取り専用
 
 ### エクスポート・バックアップ
 
@@ -113,9 +129,12 @@ uvicorn app.main:app --reload
 主なURL:
 
 - ダッシュボード: <http://127.0.0.1:8000>
-- 日別履歴: <http://127.0.0.1:8000/history>
-- 週次集計: <http://127.0.0.1:8000/weekly>
-- 月次集計: <http://127.0.0.1:8000/monthly>
+- 時間記録・メモの日別履歴: <http://127.0.0.1:8000/history>
+- 時間記録の週次集計: <http://127.0.0.1:8000/weekly>
+- 時間記録の月次集計: <http://127.0.0.1:8000/monthly>
+- 習慣の日別履歴: <http://127.0.0.1:8000/habits/history>
+- 習慣の週次集計: <http://127.0.0.1:8000/habits/weekly>
+- 習慣の月次集計: <http://127.0.0.1:8000/habits/monthly>
 - 時間記録CSV: <http://127.0.0.1:8000/exports/time-entries.csv>
 
 初回起動時に`home_panel.db`が自動作成されます。  
@@ -150,7 +169,7 @@ uvicorn app.main:app --reload
 
 詳細な仕様、連続日数の計算、エラー時の挙動は[`HABITS.md`](./HABITS.md)を参照してください。
 
-## 日別履歴
+## 時間記録・メモの日別履歴
 
 `/history`は当日を表示します。`target_date`で日付を指定できます。
 
@@ -161,10 +180,10 @@ uvicorn app.main:app --reload
 - `YYYY-MM-DD`形式のみ
 - 未来日は400
 - メモ、時間記録、合計時間、件数、カテゴリ別合計を表示
-- ToDoと習慣は現時点では対象外
+- ToDoは日付・完了日を保持していないため対象外
 - 読み取り専用
 
-## 週次集計
+## 時間記録の週次集計
 
 ```text
 /weekly?target_date=2026-07-23
@@ -176,7 +195,7 @@ uvicorn app.main:app --reload
 - 日別履歴への導線
 - 読み取り専用
 
-## 月次集計
+## 時間記録の月次集計
 
 ```text
 /monthly?target_month=2026-07
@@ -188,6 +207,46 @@ uvicorn app.main:app --reload
 - カテゴリ別合計と日別カレンダー
 - 現在月の未来日は集計対象外
 - 読み取り専用
+
+## 習慣の日別履歴
+
+```text
+/habits/history?target_date=2026-07-21
+```
+
+- 指定日に有効だった習慣を表示
+- 達成・未達成、達成数、達成率
+- 終了済み習慣も過去の有効期間では表示
+- 前日・翌日移動
+- 読み取り専用
+
+## 習慣の週次集計
+
+```text
+/habits/weekly?target_date=2026-07-23
+```
+
+- 指定日を含む月曜日〜日曜日
+- 達成数、対象件数、総合達成率
+- 全対象習慣を達成した日数
+- 日別達成率
+- 習慣別達成日数・最長連続日数
+- 現在週の未来日は集計対象外
+
+## 習慣の月次集計
+
+```text
+/habits/monthly?target_month=2026-07
+```
+
+- 月間の日別カレンダー
+- 達成数、対象件数、達成率
+- 全対象習慣を達成した日数
+- 習慣別達成日数・最長連続日数
+- 日別履歴への導線
+- 現在月の未来日は集計対象外
+
+達成率は、習慣の作成日・終了日を考慮し、各日に有効だった習慣数を分母として計算します。詳細は[`HABIT_REPORTS.md`](./HABIT_REPORTS.md)を参照してください。
 
 ## 時間記録CSV
 
@@ -311,6 +370,8 @@ home-panel-py/
 │  ├─ main.py
 │  ├─ db.py
 │  ├─ dashboard_cards.py
+│  ├─ habit_report.py
+│  ├─ habit_report_routes.py
 │  ├─ csv_export.py
 │  ├─ backup_export.py
 │  ├─ backup_validate.py
@@ -337,16 +398,21 @@ home-panel-py/
 │  │  ├─ dashboard.html
 │  │  ├─ history.html
 │  │  ├─ weekly.html
-│  │  └─ monthly.html
+│  │  ├─ monthly.html
+│  │  ├─ habit_history.html
+│  │  ├─ habit_weekly.html
+│  │  └─ habit_monthly.html
 │  └─ static/
 │     ├─ style.css
 │     ├─ dashboard.css
 │     ├─ monthly.css
+│     ├─ habit_reports.css
 │     └─ app.js
 ├─ tests/
 ├─ BACKUP.md
 ├─ DASHBOARD.md
 ├─ HABITS.md
+├─ HABIT_REPORTS.md
 ├─ requirements.txt
 └─ README.md
 ```
@@ -361,7 +427,8 @@ pytest -q
 
 - ToDo・メモ・時間記録
 - 習慣追加・達成・取り消し・終了・連続日数・上限
-- 日別・週次・月次集計
+- 時間記録の日別・週次・月次集計
+- 習慣の日別・週次・月次集計と有効期間
 - CSVエクスポート
 - JSONバックアップv2生成とv1・v2検証
 - ダッシュボード設定の保存・非表示・順序・初期化・新カード補完
@@ -386,7 +453,8 @@ pytest -q
 
 - 習慣名の編集、終了済み習慣の一覧・再開
 - 習慣の曜日・頻度設定
-- 習慣の日別・週次・月次集計
+- 習慣レポートCSV・年次集計
+- 習慣終了日時を保持する`archived_at`とSQLiteマイグレーション
 - キーボード操作によるカード並び替え
 - ダッシュボードの表示密度・テーマ設定
 - JSONバックアップからの安全な復元

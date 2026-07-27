@@ -23,6 +23,7 @@ from app.dashboard_cards import (
     validate_dashboard_preferences,
 )
 from app.db import Base, engine, get_db
+from app.habit_report_routes import router as habit_report_router
 from app.schemas.dashboard import DashboardPreferencesUpdate
 from app.schemas.habit import HabitCreate
 from app.schemas.memo import DailyMemoUpdate
@@ -36,6 +37,7 @@ WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 
 app = FastAPI(title="Home Panel")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.include_router(habit_report_router)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
