@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -162,7 +162,11 @@ def archive_habit(
         return False
 
     changed_on = archived_on or date.today()
-    changed_at = datetime.utcnow()
+    changed_at = (
+        datetime.combine(changed_on, time.min)
+        if archived_on is not None
+        else datetime.utcnow()
+    )
     open_periods = list(
         db.scalars(
             select(HabitActivePeriod).where(
