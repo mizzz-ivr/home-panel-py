@@ -13,7 +13,7 @@ from app.backup_export import (
     write_backup_file,
 )
 from app.db import Base
-from app.models.habit import Habit, HabitCompletion
+from app.models.habit import Habit, HabitActivePeriod, HabitCompletion
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
@@ -56,6 +56,14 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
     session.add(habit)
     session.flush()
     session.add(
+        HabitActivePeriod(
+            habit_id=habit.id,
+            started_on=date(2026, 7, 1),
+            ended_on=date(2026, 7, 24),
+            created_at=created_at,
+        )
+    )
+    session.add(
         HabitCompletion(
             habit_id=habit.id,
             completed_on=date(2026, 7, 23),
@@ -69,7 +77,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         exported_at=datetime(2026, 7, 24, 4, 5, 6, tzinfo=timezone.utc),
     )
 
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == 4
     assert payload["application"] == "home-panel-py"
     assert payload["exported_at"] == "2026-07-24T04:05:06Z"
     assert payload["record_counts"] == {
@@ -77,6 +85,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         "daily_memos": 1,
         "time_entries": 1,
         "habits": 1,
+        "habit_active_periods": 1,
         "habit_completions": 1,
     }
     assert payload["data"]["tasks"][0]["title"] == "日本語タスク"
@@ -85,6 +94,8 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
     assert payload["data"]["habits"][0]["name"] == "毎日読書"
     assert payload["data"]["habits"][0]["is_active"] is False
     assert payload["data"]["habits"][0]["archived_at"] == "2026-07-24T03:00:00Z"
+    assert payload["data"]["habit_active_periods"][0]["started_on"] == "2026-07-01"
+    assert payload["data"]["habit_active_periods"][0]["ended_on"] == "2026-07-24"
     assert payload["data"]["habit_completions"][0]["habit_id"] == habit.id
 
 
@@ -101,6 +112,17 @@ def test_build_backup_payload_is_deterministically_ordered(session):
     session.flush()
     session.add_all(
         [
+            HabitActivePeriod(
+                habit_id=habit.id,
+                started_on=date(2026, 7, 20),
+                created_at=stamp,
+            ),
+            HabitActivePeriod(
+                habit_id=habit.id,
+                started_on=date(2026, 7, 1),
+                ended_on=date(2026, 7, 10),
+                created_at=stamp,
+            ),
             HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 24), created_at=stamp),
             HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 23), created_at=stamp),
         ]
@@ -112,6 +134,10 @@ def test_build_backup_payload_is_deterministically_ordered(session):
     assert [item["entry_date"] for item in payload["data"]["time_entries"]] == [
         "2026-07-23",
         "2026-07-24",
+    ]
+    assert [item["started_on"] for item in payload["data"]["habit_active_periods"]] == [
+        "2026-07-01",
+        "2026-07-20",
     ]
     assert [item["completed_on"] for item in payload["data"]["habit_completions"]] == [
         "2026-07-23",
@@ -128,6 +154,7 @@ def test_build_backup_payload_handles_empty_database(session):
         "daily_memos": 0,
         "time_entries": 0,
         "habits": 0,
+        "habit_active_periods": 0,
         "habit_completions": 0,
     }
     assert payload["data"] == {
@@ -135,6 +162,7 @@ def test_build_backup_payload_handles_empty_database(session):
         "daily_memos": [],
         "time_entries": [],
         "habits": [],
+        "habit_active_periods": [],
         "habit_completions": [],
     }
 
@@ -174,7 +202,7 @@ def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
 
     write_backup_file(session, output, overwrite=True)
 
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 3
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 4
 
 
 def test_default_output_path_uses_utc_timestamp():
@@ -260,5 +288,14 @@ def test_run_cli_migrates_legacy_habits_before_export(tmp_path: Path):
 
     assert run_cli(["--database", str(database), "--output", str(output)]) == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == 4
     assert payload["data"]["habits"][0]["archived_at"] == "2026-07-10T00:00:00Z"
+    assert payload["data"]["habit_active_periods"] == [
+        {
+            "id": 1,
+            "habit_id": 1,
+            "started_on": "2026-07-01",
+            "ended_on": "2026-07-10",
+            "created_at": payload["data"]["habit_active_periods"][0]["created_at"],
+        }
+    ]
