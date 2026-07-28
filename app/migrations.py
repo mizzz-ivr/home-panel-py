@@ -208,8 +208,10 @@ def migrate_habit_schedule_periods(engine: Engine) -> bool:
 
 def migrate_habit_schema(engine: Engine) -> dict[str, bool]:
     """習慣関連の互換移行を順序どおり実行する。"""
+    archived_at_added = migrate_habit_archived_at(engine)
+    active_periods_created = migrate_habit_active_periods(engine)
+    migrate_habit_schedule_periods(engine)
     return {
-        "archived_at_added": migrate_habit_archived_at(engine),
-        "active_periods_created": migrate_habit_active_periods(engine),
-        "schedule_periods_created": migrate_habit_schedule_periods(engine),
+        "archived_at_added": archived_at_added,
+        "active_periods_created": active_periods_created,
     }
