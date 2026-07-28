@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy import Engine, inspect, text
 
+from app.habit_schedule import ALL_WEEKDAYS_MASK
+
 
 def migrate_habit_archived_at(engine: Engine) -> bool:
     """既存のhabitsテーブルへarchived_at列を追加し、終了済みデータを補完する。"""
@@ -28,6 +30,36 @@ def migrate_habit_archived_at(engine: Engine) -> bool:
                 "UPDATE habits "
                 "SET archived_at = NULL "
                 "WHERE is_active = 1 AND archived_at IS NOT NULL"
+            )
+        )
+
+    return added_column
+
+
+def migrate_habit_target_weekdays(engine: Engine) -> bool:
+    """既存習慣へ対象曜日マスクを追加し、毎日対象として補完する。"""
+    inspector = inspect(engine)
+    if "habits" not in inspector.get_table_names():
+        return False
+
+    column_names = {column["name"] for column in inspector.get_columns("habits")}
+    added_column = "target_weekdays_mask" not in column_names
+
+    with engine.begin() as connection:
+        if added_column:
+            connection.execute(
+                text(
+                    "ALTER TABLE habits ADD COLUMN target_weekdays_mask "
+                    f"INTEGER NOT NULL DEFAULT {ALL_WEEKDAYS_MASK}"
+                )
+            )
+        connection.execute(
+            text(
+                "UPDATE habits "
+                f"SET target_weekdays_mask = {ALL_WEEKDAYS_MASK} "
+                "WHERE target_weekdays_mask IS NULL "
+                "OR target_weekdays_mask < 1 "
+                f"OR target_weekdays_mask > {ALL_WEEKDAYS_MASK}"
             )
         )
 
@@ -128,5 +160,6 @@ def migrate_habit_schema(engine: Engine) -> dict[str, bool]:
     """習慣関連の互換移行を順序どおり実行する。"""
     return {
         "archived_at_added": migrate_habit_archived_at(engine),
+        "target_weekdays_added": migrate_habit_target_weekdays(engine),
         "active_periods_created": migrate_habit_active_periods(engine),
     }
