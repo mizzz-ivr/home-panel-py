@@ -13,14 +13,26 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.habit_schedule import ALL_WEEKDAYS_MASK
 
 
 class Habit(Base):
     __tablename__ = "habits"
+    __table_args__ = (
+        CheckConstraint(
+            "target_weekdays_mask BETWEEN 1 AND 127",
+            name="ck_habit_target_weekdays_mask",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    target_weekdays_mask: Mapped[int] = mapped_column(
+        Integer,
+        default=ALL_WEEKDAYS_MASK,
+        nullable=False,
+    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
