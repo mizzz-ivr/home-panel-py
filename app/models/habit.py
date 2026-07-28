@@ -18,21 +18,10 @@ from app.habit_schedule import ALL_WEEKDAYS_MASK
 
 class Habit(Base):
     __tablename__ = "habits"
-    __table_args__ = (
-        CheckConstraint(
-            "target_weekdays_mask BETWEEN 1 AND 127",
-            name="ck_habit_target_weekdays_mask",
-        ),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    target_weekdays_mask: Mapped[int] = mapped_column(
-        Integer,
-        default=ALL_WEEKDAYS_MASK,
-        nullable=False,
-    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -58,6 +47,41 @@ class HabitActivePeriod(Base):
         ForeignKey("habits.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    started_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    ended_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class HabitSchedulePeriod(Base):
+    __tablename__ = "habit_schedule_periods"
+    __table_args__ = (
+        UniqueConstraint("habit_id", "started_on", name="uq_habit_schedule_period_start"),
+        CheckConstraint(
+            "ended_on IS NULL OR ended_on >= started_on",
+            name="ck_habit_schedule_period_dates",
+        ),
+        CheckConstraint(
+            "weekdays_mask BETWEEN 1 AND 127",
+            name="ck_habit_schedule_weekdays_mask",
+        ),
+        CheckConstraint(
+            "schedule_type = 'weekdays'",
+            name="ck_habit_schedule_type",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    habit_id: Mapped[int] = mapped_column(
+        ForeignKey("habits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    schedule_type: Mapped[str] = mapped_column(String(20), default="weekdays", nullable=False)
+    weekdays_mask: Mapped[int] = mapped_column(
+        Integer,
+        default=ALL_WEEKDAYS_MASK,
+        nullable=False,
     )
     started_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     ended_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
