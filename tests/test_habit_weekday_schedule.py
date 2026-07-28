@@ -20,7 +20,7 @@ from app.habit_schedule import (
 )
 from app.main import app
 from app.migrations import migrate_habit_schedule_periods
-from app.models.habit import HabitCompletion, HabitSchedulePeriod
+from app.models.habit import HabitCompletion
 
 
 @pytest.fixture()
@@ -58,6 +58,16 @@ def client(tmp_path: Path):
     engine.dispose()
 
 
+def create_historical_habit(session, name: str):
+    started_on = date(2026, 7, 6)
+    habit = habit_crud.create_habit(session, name, started_on=started_on)
+    created_at = datetime(2026, 7, 6, 0, 0, 0)
+    habit.created_at = created_at
+    habit.updated_at = created_at
+    session.commit()
+    return habit
+
+
 def test_weekday_mask_conversion_and_labels():
     assert weekdays_to_mask([0, 2, 4]) == 21
     assert mask_to_weekdays(21) == (0, 2, 4)
@@ -85,7 +95,7 @@ def test_create_habit_creates_everyday_schedule_period(session):
 
 
 def test_schedule_change_preserves_past_period_and_same_day_update(session):
-    habit = habit_crud.create_habit(session, "運動", started_on=date(2026, 7, 6))
+    habit = create_historical_habit(session, "運動")
 
     habit_crud.update_habit_schedule(
         session,
@@ -108,7 +118,7 @@ def test_schedule_change_preserves_past_period_and_same_day_update(session):
 
 
 def test_report_excludes_non_target_weekdays_and_preserves_schedule_history(session):
-    habit = habit_crud.create_habit(session, "学習", started_on=date(2026, 7, 6))
+    habit = create_historical_habit(session, "学習")
     habit_crud.update_habit_schedule(
         session,
         habit.id,
@@ -173,7 +183,7 @@ def test_off_schedule_completion_is_rejected_without_mutation(session):
 
 
 def test_schedule_change_rejects_excluding_existing_completion(session):
-    habit = habit_crud.create_habit(session, "読書", started_on=date(2026, 7, 6))
+    habit = create_historical_habit(session, "読書")
     session.add(HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 9)))
     session.commit()
 
