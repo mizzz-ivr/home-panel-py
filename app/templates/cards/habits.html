@@ -42,8 +42,8 @@
       <div class="habit-main">
         <strong>{{ item.habit.name }}</strong>
         <span class="habit-streak">
-          対象: {{ item.schedule_label }} / 
-          {% if item.current_streak > 0 %}{{ item.current_streak }}回継続{% elif item.scheduled_today %}今日から開始{% else %}今日は対象外{% endif %}
+          対象: {{ item.schedule_label }} /
+          {% if item.current_streak > 0 %}{{ item.current_streak }}日継続{% elif item.scheduled_today %}今日から開始{% else %}今日は対象外{% endif %}
         </span>
       </div>
       <div class="actions">
