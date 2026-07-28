@@ -26,14 +26,62 @@
   opacity: 0.9;
 }
 
-.habit-rename-form {
+.habit-rename-form,
+.habit-schedule-form {
   display: grid;
   gap: 0.4rem;
 }
 
-.habit-rename-form label {
+.habit-rename-form label,
+.habit-schedule-form legend {
   font-size: 0.85rem;
   font-weight: 700;
+}
+
+.habit-schedule-form fieldset {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.7rem;
+}
+
+.schedule-current {
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.weekday-options {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(2.5rem, 1fr));
+  gap: 0.35rem;
+}
+
+.weekday-option {
+  display: grid;
+  place-items: center;
+  gap: 0.25rem;
+  min-height: 3.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.55rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.weekday-option:has(input:checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.weekday-option input {
+  margin: 0;
+}
+
+.habit-schedule-form button {
+  justify-self: start;
 }
 
 .habit-management-meta,
@@ -85,7 +133,12 @@
 
   .habit-management-item .inline-form > *,
   .habit-management-footer form,
-  .habit-management-footer button {
+  .habit-management-footer button,
+  .habit-schedule-form button {
     width: 100%;
+  }
+
+  .weekday-options {
+    grid-template-columns: repeat(4, minmax(2.5rem, 1fr));
   }
 }
