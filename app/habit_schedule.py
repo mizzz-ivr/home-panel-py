@@ -63,6 +63,8 @@ def is_expected_on(
 ) -> bool:
     if not any(is_date_in_period(target_date, period) for period in active_periods):
         return False
+    if not schedule_periods:
+        return True
     mask = get_schedule_mask_on(schedule_periods, target_date)
     return mask is not None and is_scheduled_on(mask, target_date)
 
