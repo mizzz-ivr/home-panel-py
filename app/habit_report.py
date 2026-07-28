@@ -8,7 +8,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
-from app.models.habit import Habit, HabitActivePeriod
+from app.habit_schedule import (
+    ALL_WEEKDAYS_MASK,
+    expected_dates_between,
+    format_schedule,
+    get_schedule_mask_on,
+    is_expected_on,
+)
+from app.models.habit import Habit, HabitActivePeriod, HabitSchedulePeriod
 
 
 def daterange(start_date: date, end_date: date) -> Iterator[date]:
@@ -18,7 +25,7 @@ def daterange(start_date: date, end_date: date) -> Iterator[date]:
         current += timedelta(days=1)
 
 
-def is_period_active_on(period: HabitActivePeriod, target_date: date) -> bool:
+def is_period_active_on(period: Any, target_date: date) -> bool:
     return period.started_on <= target_date and (
         period.ended_on is None or target_date <= period.ended_on
     )
@@ -42,14 +49,32 @@ def is_habit_active_on(
     return target_date <= archived_at.date()
 
 
+def is_habit_expected_on(
+    habit: Habit,
+    target_date: date,
+    active_periods: Sequence[HabitActivePeriod] | None,
+    schedule_periods: Sequence[HabitSchedulePeriod] | None,
+) -> bool:
+    if active_periods:
+        return is_expected_on(target_date, active_periods, schedule_periods or ())
+    if not is_habit_active_on(habit, target_date):
+        return False
+    if not schedule_periods:
+        return True
+    mask = get_schedule_mask_on(schedule_periods, target_date)
+    return mask is not None and bool(mask & (1 << target_date.weekday()))
+
+
 def calculate_longest_streak(
     completed_dates: set[date],
     start_date: date,
     end_date: date,
+    expected_dates: Sequence[date] | None = None,
 ) -> int:
+    targets = list(expected_dates) if expected_dates is not None else list(daterange(start_date, end_date))
     longest = 0
     current = 0
-    for target_date in daterange(start_date, end_date):
+    for target_date in targets:
         if target_date in completed_dates:
             current += 1
             longest = max(longest, current)
@@ -58,10 +83,8 @@ def calculate_longest_streak(
     return longest
 
 
-def group_periods_by_habit(
-    periods: Sequence[HabitActivePeriod],
-) -> dict[int, list[HabitActivePeriod]]:
-    grouped: dict[int, list[HabitActivePeriod]] = defaultdict(list)
+def group_periods_by_habit(periods: Sequence[Any]) -> dict[int, list[Any]]:
+    grouped: dict[int, list[Any]] = defaultdict(list)
     for period in periods:
         grouped[period.habit_id].append(period)
     return grouped
@@ -69,32 +92,40 @@ def group_periods_by_habit(
 
 def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
     habits = habit_crud.list_all_habits(db)
-    periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
+    active_periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
+    schedule_periods_by_habit = group_periods_by_habit(habit_crud.list_schedule_periods(db))
     completions = habit_crud.list_completions_between(db, selected_date, selected_date)
     completed_ids = {completion.habit_id for completion in completions}
 
     items: list[dict[str, Any]] = []
     for habit in habits:
-        was_active = is_habit_active_on(
+        active_periods = active_periods_by_habit.get(habit.id)
+        schedule_periods = schedule_periods_by_habit.get(habit.id)
+        was_active = is_habit_active_on(habit, selected_date, active_periods)
+        was_scheduled = is_habit_expected_on(
             habit,
             selected_date,
-            periods_by_habit.get(habit.id),
+            active_periods,
+            schedule_periods,
         )
         was_completed = habit.id in completed_ids
         if not was_active and not was_completed:
             continue
+        schedule_mask = get_schedule_mask_on(schedule_periods or (), selected_date) or ALL_WEEKDAYS_MASK
         items.append(
             {
                 "habit": habit,
                 "completed": was_completed,
                 "was_active": was_active,
+                "was_scheduled": was_scheduled,
+                "schedule_label": format_schedule(schedule_mask),
                 "is_archived": not habit.is_active,
             }
         )
 
-    expected_count = sum(1 for item in items if item["was_active"])
+    expected_count = sum(1 for item in items if item["was_scheduled"])
     completed_count = sum(
-        1 for item in items if item["was_active"] and item["completed"]
+        1 for item in items if item["was_scheduled"] and item["completed"]
     )
     achievement_rate = round(completed_count / expected_count * 100) if expected_count else 0
 
@@ -114,7 +145,8 @@ def build_period_report(
 ) -> dict[str, Any]:
     effective_end = min(end_date, today)
     habits = habit_crud.list_all_habits(db)
-    periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
+    active_periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
+    schedule_periods_by_habit = group_periods_by_habit(habit_crud.list_schedule_periods(db))
     completions = habit_crud.list_completions_between(db, start_date, effective_end)
 
     completion_dates_by_habit: dict[int, set[date]] = defaultdict(set)
@@ -142,17 +174,18 @@ def build_period_report(
             )
             continue
 
-        active_ids = {
+        expected_ids = {
             habit.id
             for habit in habits
-            if is_habit_active_on(
+            if is_habit_expected_on(
                 habit,
                 target_date,
-                periods_by_habit.get(habit.id),
+                active_periods_by_habit.get(habit.id),
+                schedule_periods_by_habit.get(habit.id),
             )
         }
-        completed_count = len(completion_ids_by_date[target_date] & active_ids)
-        expected_count = len(active_ids)
+        completed_count = len(completion_ids_by_date[target_date] & expected_ids)
+        expected_count = len(expected_ids)
         achievement_rate = (
             round(completed_count / expected_count * 100) if expected_count else 0
         )
@@ -173,13 +206,23 @@ def build_period_report(
 
     habit_summaries: list[dict[str, Any]] = []
     for habit in habits:
-        habit_periods = periods_by_habit.get(habit.id)
-        expected_dates = {
-            target_date
-            for target_date in daterange(start_date, effective_end)
-            if is_habit_active_on(habit, target_date, habit_periods)
-        }
-        completed_dates = completion_dates_by_habit[habit.id] & expected_dates
+        active_periods = active_periods_by_habit.get(habit.id) or ()
+        schedule_periods = schedule_periods_by_habit.get(habit.id) or ()
+        if active_periods:
+            expected_dates = expected_dates_between(
+                start_date,
+                effective_end,
+                active_periods,
+                schedule_periods,
+            )
+        else:
+            expected_dates = [
+                target_date
+                for target_date in daterange(start_date, effective_end)
+                if is_habit_expected_on(habit, target_date, None, schedule_periods)
+            ]
+        expected_date_set = set(expected_dates)
+        completed_dates = completion_dates_by_habit[habit.id] & expected_date_set
         if not expected_dates and not completed_dates:
             continue
 
@@ -188,6 +231,11 @@ def build_period_report(
         achievement_rate = (
             round(completed_days / expected_days * 100) if expected_days else 0
         )
+        current_mask = (
+            get_schedule_mask_on(schedule_periods, effective_end)
+            if effective_end >= start_date
+            else None
+        ) or ALL_WEEKDAYS_MASK
         habit_summaries.append(
             {
                 "habit": habit,
@@ -198,11 +246,14 @@ def build_period_report(
                     completed_dates,
                     start_date,
                     effective_end,
+                    expected_dates,
                 )
                 if effective_end >= start_date
                 else 0,
+                "schedule_label": format_schedule(current_mask),
                 "is_archived": not habit.is_active,
-                "active_period_count": len(habit_periods or ()),
+                "active_period_count": len(active_periods),
+                "schedule_period_count": len(schedule_periods),
             }
         )
 
