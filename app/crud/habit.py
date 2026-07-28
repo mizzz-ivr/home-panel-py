@@ -52,7 +52,9 @@ def list_archived_habits(db: Session) -> list[Habit]:
 
 
 def list_all_habits(db: Session) -> list[Habit]:
-    return list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
+    return list(
+        db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all()
+    )
 
 
 def list_active_periods(db: Session) -> list[HabitActivePeriod]:
@@ -160,7 +162,9 @@ def get_active_habit(db: Session, habit_id: int) -> Habit | None:
     )
 
 
-def get_schedule_periods_for_habit(db: Session, habit_id: int) -> list[HabitSchedulePeriod]:
+def get_schedule_periods_for_habit(
+    db: Session, habit_id: int
+) -> list[HabitSchedulePeriod]:
     return list(
         db.scalars(
             select(HabitSchedulePeriod)
@@ -170,13 +174,19 @@ def get_schedule_periods_for_habit(db: Session, habit_id: int) -> list[HabitSche
     )
 
 
-def get_current_schedule_mask(db: Session, habit_id: int, target_date: date | None = None) -> int:
+def get_current_schedule_mask(
+    db: Session, habit_id: int, target_date: date | None = None
+) -> int:
     selected_date = target_date or date.today()
-    mask = get_schedule_mask_on(get_schedule_periods_for_habit(db, habit_id), selected_date)
+    mask = get_schedule_mask_on(
+        get_schedule_periods_for_habit(db, habit_id), selected_date
+    )
     return mask if mask is not None else ALL_WEEKDAYS_MASK
 
 
-def get_schedule_display(db: Session, habit_id: int, target_date: date | None = None) -> str:
+def get_schedule_display(
+    db: Session, habit_id: int, target_date: date | None = None
+) -> str:
     return format_schedule(get_current_schedule_mask(db, habit_id, target_date))
 
 
@@ -221,9 +231,12 @@ def update_habit_schedule(
             HabitCompletion.completed_on == change_date,
         )
     )
-    if existing_completion is not None and not (new_mask & (1 << change_date.weekday())):
+    if existing_completion is not None and not (
+        new_mask & (1 << change_date.weekday())
+    ):
         raise HabitScheduleConflictError(
-            "変更日の達成記録があるため、その曜日を対象外にできません。先に達成を取り消してください。"
+            "変更日の達成記録があるため、その曜日を対象外にできません。"
+            "先に達成を取り消してください。"
         )
 
     if current_period is None:
@@ -265,7 +278,9 @@ def is_habit_expected_on(db: Session, habit_id: int, target_date: date) -> bool:
     return is_expected_on(target_date, active_periods, schedule_periods)
 
 
-def toggle_today_completion(db: Session, habit_id: int, target_date: date) -> bool | None:
+def toggle_today_completion(
+    db: Session, habit_id: int, target_date: date
+) -> bool | None:
     habit = get_active_habit(db, habit_id)
     if habit is None:
         return None
@@ -358,7 +373,22 @@ def restore_habit(
     return True
 
 
-def get_dashboard_summary(db: Session, today: date) -> tuple[list[dict[str, Any]], int, int]:
+def calculate_current_streak(completed_dates: set[date], today: date) -> int:
+    """既存呼び出し向けにカレンダー日単位の連続日数を計算する。"""
+    if not completed_dates:
+        return 0
+
+    cursor = today if today in completed_dates else today - timedelta(days=1)
+    streak = 0
+    while cursor in completed_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def get_dashboard_summary(
+    db: Session, today: date
+) -> tuple[list[dict[str, Any]], int, int]:
     habits = list_active_habits(db)
     if not habits:
         return [], 0, 0
@@ -378,7 +408,9 @@ def get_dashboard_summary(db: Session, today: date) -> tuple[list[dict[str, Any]
     )
     schedule_periods = list(
         db.scalars(
-            select(HabitSchedulePeriod).where(HabitSchedulePeriod.habit_id.in_(habit_ids))
+            select(HabitSchedulePeriod).where(
+                HabitSchedulePeriod.habit_id.in_(habit_ids)
+            )
         ).all()
     )
 
@@ -415,7 +447,10 @@ def get_dashboard_summary(db: Session, today: date) -> tuple[list[dict[str, Any]
             scheduled_today_count += 1
         if is_completed_today:
             completed_today += 1
-        current_mask = get_schedule_mask_on(habit_schedule_periods, today) or ALL_WEEKDAYS_MASK
+        current_mask = (
+            get_schedule_mask_on(habit_schedule_periods, today)
+            or ALL_WEEKDAYS_MASK
+        )
         items.append(
             {
                 "habit": habit,
@@ -423,7 +458,9 @@ def get_dashboard_summary(db: Session, today: date) -> tuple[list[dict[str, Any]
                 "scheduled_today": scheduled_today,
                 "schedule_label": format_schedule(current_mask),
                 "schedule_weekdays": mask_to_weekdays(current_mask),
-                "current_streak": calculate_scheduled_streak(dates, expected_dates, today),
+                "current_streak": calculate_scheduled_streak(
+                    dates, expected_dates, today
+                ),
             }
         )
 
