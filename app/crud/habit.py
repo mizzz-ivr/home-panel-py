@@ -276,6 +276,8 @@ def toggle_today_completion(db: Session, habit_id: int, target_date: date) -> bo
             HabitCompletion.completed_on == target_date,
         )
     )
+    if completion is None and not is_habit_expected_on(db, habit_id, target_date):
+        return False
     if completion is None:
         db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
         completed = True
