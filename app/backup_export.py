@@ -14,20 +14,21 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.migrations import migrate_habit_archived_at
-from app.models.habit import Habit, HabitCompletion
+from app.migrations import migrate_habit_schema
+from app.models.habit import Habit, HabitActivePeriod, HabitCompletion
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
 
-BACKUP_SCHEMA_VERSION = 3
-REQUIRED_TABLES = {
+BACKUP_SCHEMA_VERSION = 4
+BASE_REQUIRED_TABLES = {
     "tasks",
     "daily_memos",
     "time_entries",
     "habits",
     "habit_completions",
 }
+REQUIRED_TABLES = {*BASE_REQUIRED_TABLES, "habit_active_periods"}
 
 
 def format_datetime(value: datetime) -> str:
@@ -56,6 +57,15 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
         ).all()
     )
     habits = list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
+    habit_active_periods = list(
+        db.scalars(
+            select(HabitActivePeriod).order_by(
+                HabitActivePeriod.habit_id.asc(),
+                HabitActivePeriod.started_on.asc(),
+                HabitActivePeriod.id.asc(),
+            )
+        ).all()
+    )
     habit_completions = list(
         db.scalars(
             select(HabitCompletion).order_by(
@@ -75,6 +85,7 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             "daily_memos": len(memos),
             "time_entries": len(entries),
             "habits": len(habits),
+            "habit_active_periods": len(habit_active_periods),
             "habit_completions": len(habit_completions),
         },
         "data": {
@@ -118,6 +129,16 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
                     "updated_at": format_datetime(habit.updated_at),
                 }
                 for habit in habits
+            ],
+            "habit_active_periods": [
+                {
+                    "id": period.id,
+                    "habit_id": period.habit_id,
+                    "started_on": period.started_on.isoformat(),
+                    "ended_on": period.ended_on.isoformat() if period.ended_on is not None else None,
+                    "created_at": format_datetime(period.created_at),
+                }
+                for period in habit_active_periods
             ],
             "habit_completions": [
                 {
@@ -214,17 +235,20 @@ def run_cli(args: Sequence[str] | None = None) -> int:
         connect_args={"check_same_thread": False},
     )
     try:
+        table_names = set(inspect(engine).get_table_names())
+        missing_base_tables = BASE_REQUIRED_TABLES - table_names
+        if not missing_base_tables:
+            migrate_habit_schema(engine)
         missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
-        if not missing_tables:
-            migrate_habit_archived_at(engine)
     except SQLAlchemyError as exc:
         print(f"バックアップ対象のDBを確認できません: {exc}", file=sys.stderr)
         engine.dispose()
         return 1
 
-    if missing_tables:
+    if missing_base_tables or missing_tables:
+        missing = missing_base_tables or missing_tables
         print(
-            "必要なテーブルが不足しています: " + ", ".join(sorted(missing_tables)),
+            "必要なテーブルが不足しています: " + ", ".join(sorted(missing)),
             file=sys.stderr,
         )
         engine.dispose()

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
-from app.models.habit import Habit
+from app.models.habit import Habit, HabitActivePeriod
 
 
 def daterange(start_date: date, end_date: date) -> Iterator[date]:
@@ -18,7 +18,20 @@ def daterange(start_date: date, end_date: date) -> Iterator[date]:
         current += timedelta(days=1)
 
 
-def is_habit_active_on(habit: Habit, target_date: date) -> bool:
+def is_period_active_on(period: HabitActivePeriod, target_date: date) -> bool:
+    return period.started_on <= target_date and (
+        period.ended_on is None or target_date <= period.ended_on
+    )
+
+
+def is_habit_active_on(
+    habit: Habit,
+    target_date: date,
+    periods: Sequence[HabitActivePeriod] | None = None,
+) -> bool:
+    if periods:
+        return any(is_period_active_on(period, target_date) for period in periods)
+
     created_on = habit.created_at.date()
     if target_date < created_on:
         return False
@@ -45,14 +58,28 @@ def calculate_longest_streak(
     return longest
 
 
+def group_periods_by_habit(
+    periods: Sequence[HabitActivePeriod],
+) -> dict[int, list[HabitActivePeriod]]:
+    grouped: dict[int, list[HabitActivePeriod]] = defaultdict(list)
+    for period in periods:
+        grouped[period.habit_id].append(period)
+    return grouped
+
+
 def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
     habits = habit_crud.list_all_habits(db)
+    periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
     completions = habit_crud.list_completions_between(db, selected_date, selected_date)
     completed_ids = {completion.habit_id for completion in completions}
 
     items: list[dict[str, Any]] = []
     for habit in habits:
-        was_active = is_habit_active_on(habit, selected_date)
+        was_active = is_habit_active_on(
+            habit,
+            selected_date,
+            periods_by_habit.get(habit.id),
+        )
         was_completed = habit.id in completed_ids
         if not was_active and not was_completed:
             continue
@@ -87,6 +114,7 @@ def build_period_report(
 ) -> dict[str, Any]:
     effective_end = min(end_date, today)
     habits = habit_crud.list_all_habits(db)
+    periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
     completions = habit_crud.list_completions_between(db, start_date, effective_end)
 
     completion_dates_by_habit: dict[int, set[date]] = defaultdict(set)
@@ -115,7 +143,13 @@ def build_period_report(
             continue
 
         active_ids = {
-            habit.id for habit in habits if is_habit_active_on(habit, target_date)
+            habit.id
+            for habit in habits
+            if is_habit_active_on(
+                habit,
+                target_date,
+                periods_by_habit.get(habit.id),
+            )
         }
         completed_count = len(completion_ids_by_date[target_date] & active_ids)
         expected_count = len(active_ids)
@@ -139,10 +173,11 @@ def build_period_report(
 
     habit_summaries: list[dict[str, Any]] = []
     for habit in habits:
+        habit_periods = periods_by_habit.get(habit.id)
         expected_dates = {
             target_date
             for target_date in daterange(start_date, effective_end)
-            if is_habit_active_on(habit, target_date)
+            if is_habit_active_on(habit, target_date, habit_periods)
         }
         completed_dates = completion_dates_by_habit[habit.id] & expected_dates
         if not expected_dates and not completed_dates:
@@ -167,6 +202,7 @@ def build_period_report(
                 if effective_end >= start_date
                 else 0,
                 "is_archived": not habit.is_active,
+                "active_period_count": len(habit_periods or ()),
             }
         )
 

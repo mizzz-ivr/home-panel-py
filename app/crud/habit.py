@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.habit import Habit, HabitCompletion
+from app.models.habit import Habit, HabitActivePeriod, HabitCompletion
 
 MAX_ACTIVE_HABITS = 20
 
@@ -34,6 +34,18 @@ def list_archived_habits(db: Session) -> list[Habit]:
 
 def list_all_habits(db: Session) -> list[Habit]:
     return list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
+
+
+def list_active_periods(db: Session) -> list[HabitActivePeriod]:
+    return list(
+        db.scalars(
+            select(HabitActivePeriod).order_by(
+                HabitActivePeriod.habit_id.asc(),
+                HabitActivePeriod.started_on.asc(),
+                HabitActivePeriod.id.asc(),
+            )
+        ).all()
+    )
 
 
 def list_completions_between(
@@ -81,9 +93,16 @@ def find_active_habit_by_name(
     return None
 
 
-def create_habit(db: Session, name: str) -> Habit:
+def create_habit(db: Session, name: str, *, started_on: date | None = None) -> Habit:
     habit = Habit(name=name)
     db.add(habit)
+    db.flush()
+    db.add(
+        HabitActivePeriod(
+            habit_id=habit.id,
+            started_on=started_on or date.today(),
+        )
+    )
     db.commit()
     db.refresh(habit)
     return habit
@@ -132,21 +151,68 @@ def toggle_today_completion(db: Session, habit_id: int, target_date: date) -> bo
     return completed
 
 
-def archive_habit(db: Session, habit_id: int) -> bool:
+def archive_habit(
+    db: Session,
+    habit_id: int,
+    *,
+    archived_on: date | None = None,
+) -> bool:
     habit = get_active_habit(db, habit_id)
     if habit is None:
         return False
 
+    changed_on = archived_on or date.today()
+    changed_at = (
+        datetime.combine(changed_on, time.min)
+        if archived_on is not None
+        else datetime.utcnow()
+    )
+    open_periods = list(
+        db.scalars(
+            select(HabitActivePeriod).where(
+                HabitActivePeriod.habit_id == habit_id,
+                HabitActivePeriod.ended_on.is_(None),
+            )
+        ).all()
+    )
+    if not open_periods:
+        db.add(
+            HabitActivePeriod(
+                habit_id=habit_id,
+                started_on=habit.created_at.date(),
+                ended_on=changed_on,
+            )
+        )
+    else:
+        for period in open_periods:
+            period.ended_on = max(changed_on, period.started_on)
+
     habit.is_active = False
-    habit.archived_at = datetime.utcnow()
+    habit.archived_at = changed_at
     db.commit()
     return True
 
 
-def restore_habit(db: Session, habit_id: int) -> bool:
+def restore_habit(
+    db: Session,
+    habit_id: int,
+    *,
+    restored_on: date | None = None,
+) -> bool:
     habit = get_habit(db, habit_id)
     if habit is None or habit.is_active:
         return False
+
+    changed_on = restored_on or date.today()
+    latest_period = db.scalar(
+        select(HabitActivePeriod)
+        .where(HabitActivePeriod.habit_id == habit_id)
+        .order_by(HabitActivePeriod.started_on.desc(), HabitActivePeriod.id.desc())
+    )
+    if latest_period is not None and latest_period.ended_on == changed_on:
+        latest_period.ended_on = None
+    else:
+        db.add(HabitActivePeriod(habit_id=habit_id, started_on=changed_on))
 
     habit.is_active = True
     habit.archived_at = None
