@@ -58,7 +58,7 @@ def create_habit_with_completions(
     name: str,
     weekdays: tuple[int, ...],
     completion_dates: tuple[date, ...],
-):
+) -> int:
     session_factory = client.app.state.testing_session_factory
     with session_factory() as db:
         habit = habit_crud.create_habit(
@@ -111,8 +111,6 @@ def test_weekly_csv_exports_summary_daily_and_habit_sections(client: TestClient)
         "67",
         "1",
         "利用中",
-        "1",
-        "1",
     ] in rows
 
     session_factory = client.app.state.testing_session_factory
@@ -150,6 +148,22 @@ def test_monthly_csv_marks_future_days_without_counting_them(client: TestClient)
     assert ["2026-07-31", "金", "未到来", "", "", ""] in rows
 
 
+def test_habit_csv_defaults_to_current_week_and_month(client: TestClient):
+    weekly = client.get("/habits/weekly.csv")
+    monthly = client.get("/habits/monthly.csv")
+
+    assert weekly.status_code == 200
+    assert monthly.status_code == 200
+    assert weekly.headers["content-disposition"] == (
+        'attachment; filename="home-panel-habit-weekly-2026-07-20.csv"'
+    )
+    assert monthly.headers["content-disposition"] == (
+        'attachment; filename="home-panel-habit-monthly-2026-07.csv"'
+    )
+    assert ["対象期間", "2026-07-20", "2026-07-26"] in parse_csv_response(weekly)
+    assert ["対象期間", "2026-07-01", "2026-07-31"] in parse_csv_response(monthly)
+
+
 def test_empty_habit_csv_keeps_all_section_headers(client: TestClient):
     response = client.get("/habits/weekly.csv?target_date=2026-07-23")
 
@@ -161,14 +175,12 @@ def test_empty_habit_csv_keeps_all_section_headers(client: TestClient):
     assert ["習慣別集計"] in rows
     assert [
         "習慣名",
-        "対象曜日",
+        "集計終了日時点の対象曜日",
         "達成日数",
         "対象日数",
         "達成率（%）",
         "最長連続回数",
         "現在状態",
-        "有効期間数",
-        "曜日設定期間数",
     ] in rows
 
 
