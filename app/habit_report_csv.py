@@ -88,14 +88,12 @@ def build_habit_report_csv(
         writer,
         (
             "習慣名",
-            "対象曜日",
+            "集計終了日時点の対象曜日",
             "達成日数",
             "対象日数",
             "達成率（%）",
             "最長連続回数",
             "現在状態",
-            "有効期間数",
-            "曜日設定期間数",
         ),
     )
     for summary in report["habit_summaries"]:
@@ -109,8 +107,6 @@ def build_habit_report_csv(
                 summary["achievement_rate"],
                 summary["longest_streak"],
                 "終了済み" if summary["is_archived"] else "利用中",
-                summary["active_period_count"],
-                summary["schedule_period_count"],
             ),
         )
 
