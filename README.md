@@ -46,6 +46,7 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 - 終了・再開ごとの有効期間履歴
 - 変更前を保持する曜日設定履歴
 - 停止期間・対象外曜日を除外した日別・週次・月次レポート
+- 週次・月次レポートCSV出力
 - アクティブ習慣は最大20件
 
 詳細:
@@ -53,6 +54,7 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 - [`HABITS.md`](./HABITS.md)
 - [`HABIT_SCHEDULES.md`](./HABIT_SCHEDULES.md)
 - [`HABIT_REPORTS.md`](./HABIT_REPORTS.md)
+- [`HABIT_REPORT_CSV.md`](./HABIT_REPORT_CSV.md)
 
 ### ダッシュボード設定
 
@@ -68,11 +70,15 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 ### エクスポート・バックアップ
 
 - 月単位の時間記録CSV
+- 習慣の週次・月次レポートCSV
 - ToDo・メモ・時間記録・習慣・有効期間・曜日設定期間のJSONバックアップCLI
 - バックアップ構造・件数・参照整合性・SHA-256検証CLI
 - バックアップスキーマv1〜v5の検証互換
 
-詳細は[`BACKUP.md`](./BACKUP.md)を参照してください。
+詳細:
+
+- [`HABIT_REPORT_CSV.md`](./HABIT_REPORT_CSV.md)
+- [`BACKUP.md`](./BACKUP.md)
 
 ## 使用技術
 
@@ -119,6 +125,8 @@ uvicorn app.main:app --reload
 - 習慣の週次集計: <http://127.0.0.1:8000/habits/weekly>
 - 習慣の月次集計: <http://127.0.0.1:8000/habits/monthly>
 - 時間記録CSV: <http://127.0.0.1:8000/exports/time-entries.csv>
+- 習慣週次CSV: <http://127.0.0.1:8000/habits/weekly.csv>
+- 習慣月次CSV: <http://127.0.0.1:8000/habits/monthly.csv>
 
 初回起動時に`home_panel.db`が作成されます。
 
@@ -247,6 +255,23 @@ DB変更が増えた場合は、Alembicなどの本格的なマイグレーシ�
 - `Cache-Control: no-store`
 - `X-Content-Type-Options: nosniff`
 
+## 習慣レポートCSV
+
+```text
+/habits/weekly.csv?target_date=2026-07-23
+/habits/monthly.csv?target_month=2026-07
+```
+
+- 週次・月次画面と同じ集計結果を使用
+- 概要・日別集計・習慣別集計の3セクション
+- 現在期間の未来日は`未到来`、数値列は空欄
+- UTF-8 BOM・CRLF
+- CSV数式注入対策
+- `Cache-Control: no-store`
+- `X-Content-Type-Options: nosniff`
+
+詳細は[`HABIT_REPORT_CSV.md`](./HABIT_REPORT_CSV.md)を参照してください。
+
 ## JSONバックアップ
 
 ```bash
@@ -318,7 +343,7 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 - 再開: 同名・上限・不正状態を拒否
 - 対象曜日: 月曜0〜日曜6から1つ以上、重複・範囲外を拒否
 - 曜日変更: 変更日の達成記録と矛盾する変更を拒否
-- 履歴・集計: 日付・月形式を厳密検証し未来期間を拒否
+- 履歴・集計・CSV: 日付・月形式を厳密検証し未来期間を拒否
 - ダッシュボード設定: 未登録カード、重複、欠落、全非表示を拒否
 
 ## ディレクトリ構成
@@ -333,6 +358,7 @@ home-panel-py/
 │  ├─ habit_schedule.py
 │  ├─ habit_report.py
 │  ├─ habit_report_routes.py
+│  ├─ habit_report_csv.py
 │  ├─ csv_export.py
 │  ├─ backup_export.py
 │  ├─ backup_validate.py
@@ -353,6 +379,7 @@ home-panel-py/
 ├─ HABITS.md
 ├─ HABIT_SCHEDULES.md
 ├─ HABIT_REPORTS.md
+├─ HABIT_REPORT_CSV.md
 ├─ requirements.txt
 └─ README.md
 ```
@@ -375,7 +402,8 @@ pytest -q
 - 対象外曜日の達成拒否と分母除外
 - 過去設定を保持した日別・週次・月次集計
 - 旧SQLiteからの有効期間・毎日設定生成と冪等性
-- CSVエクスポート
+- 時間記録CSVエクスポート
+- 習慣の週次・月次CSVエクスポート
 - JSONバックアップv5生成
 - v1〜v5検証
 - 有効期間・曜日設定期間・達成記録の不整合検出
@@ -409,7 +437,7 @@ Swapy 1.0.5はGPL-3.0または商用ライセンスで提供されています�
 - 曜日を固定しない週N回・隔週・月次スケジュール
 - 過去日の達成編集
 - 有効期間・曜日設定期間の手動編集
-- 習慣レポートCSV・年次集計
+- 日別履歴CSV・年次集計
 - キーボード操作によるカード並び替え
 - ダッシュボードの表示密度・テーマ設定
 - JSONバックアップからの安全な復元
