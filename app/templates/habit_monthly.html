@@ -43,7 +43,7 @@
             <button type="submit">表示</button>
           </div>
         </form>
-        <nav class="history-navigation" aria-label="月を移動">
+        <nav class="history-navigation" aria-label="月を移動・出力">
           {% if previous_month_start %}
           <a href="/habits/monthly?target_month={{ previous_month_start.strftime('%Y-%m') }}" class="button-link secondary-button">前の月</a>
           {% else %}
@@ -54,6 +54,11 @@
           {% else %}
           <span class="button-link disabled-button" aria-disabled="true">次の月</span>
           {% endif %}
+          <a
+            href="/habits/monthly.csv?target_month={{ month_start.strftime('%Y-%m') }}"
+            class="button-link secondary-button"
+            download
+          >この月をCSV出力</a>
         </nav>
       </section>
 
