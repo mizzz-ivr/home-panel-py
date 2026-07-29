@@ -87,6 +87,15 @@
   background: #f0fdf4;
 }
 
+.habit-item.not-scheduled {
+  border-style: dashed;
+  background: #f8fafc;
+}
+
+.habit-item.not-scheduled .habit-main strong {
+  color: #475569;
+}
+
 .habit-main {
   display: flex;
   align-items: center;

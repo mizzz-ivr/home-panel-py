@@ -38,19 +38,24 @@
 
   <ul class="list habit-list">
     {% for item in habit_items %}
-    <li class="habit-item {% if item.completed_today %}completed{% endif %}">
+    <li class="habit-item {% if item.completed_today %}completed{% endif %} {% if not item.scheduled_today %}not-scheduled{% endif %}">
       <div class="habit-main">
         <strong>{{ item.habit.name }}</strong>
         <span class="habit-streak">
-          {% if item.current_streak > 0 %}{{ item.current_streak }}日継続{% else %}今日から開始{% endif %}
+          対象: {{ item.schedule_label }} /
+          {% if item.current_streak > 0 %}{{ item.current_streak }}日継続{% elif item.scheduled_today %}今日から開始{% else %}今日は対象外{% endif %}
         </span>
       </div>
       <div class="actions">
+        {% if item.scheduled_today %}
         <form action="/habits/{{ item.habit.id }}/toggle-today" method="post">
           <button type="submit" class="{% if item.completed_today %}secondary-button{% endif %}">
             {% if item.completed_today %}取り消す{% else %}達成{% endif %}
           </button>
         </form>
+        {% else %}
+        <button type="button" class="secondary-button" disabled aria-disabled="true">対象外</button>
+        {% endif %}
         <form action="/habits/{{ item.habit.id }}/archive" method="post">
           <button type="submit" class="secondary-button">終了</button>
         </form>
@@ -61,7 +66,7 @@
     {% endfor %}
   </ul>
 
-  {% if habit_total >= habit_max_active %}
+  {% if habit_items|length >= habit_max_active %}
   <p class="hint">表示負荷を抑えるため、アクティブな習慣は最大{{ habit_max_active }}件です。</p>
   {% endif %}
 </section>

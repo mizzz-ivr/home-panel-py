@@ -81,14 +81,19 @@
           <li class="habit-report-item">
             <div class="habit-report-item-header">
               <strong>{{ item.habit.name }}</strong>
-              {% if item.completed %}
+              {% if item.was_scheduled and item.completed %}
               <span class="habit-status completed">達成</span>
-              {% else %}
+              {% elif item.was_scheduled %}
               <span class="habit-status missed">未達成</span>
+              {% elif item.completed %}
+              <span class="habit-status missed">対象外の記録</span>
+              {% else %}
+              <span class="habit-status">対象外</span>
               {% endif %}
             </div>
             <div class="habit-report-item-meta">
-              <span>{% if item.was_active %}この日の対象{% else %}達成記録のみ{% endif %}</span>
+              <span>設定: {{ item.schedule_label }}</span>
+              <span>{% if item.was_scheduled %}この日の達成対象{% elif item.was_active %}利用中・対象曜日外{% else %}達成記録のみ{% endif %}</span>
               {% if item.is_archived %}<span>終了済み</span>{% endif %}
             </div>
           </li>

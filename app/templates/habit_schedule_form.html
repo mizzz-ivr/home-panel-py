@@ -1,0 +1,19 @@
+<form action="/habits/{{ habit.id }}/schedule" method="post" class="habit-schedule-form">
+  <fieldset>
+    <legend>対象曜日 <span class="schedule-current">現在: {{ schedule_labels[habit.id] }}</span></legend>
+    <div class="weekday-options">
+      {% for weekday, label in weekday_options %}
+      <label class="weekday-option">
+        <input
+          type="checkbox"
+          name="weekdays"
+          value="{{ weekday }}"
+          {% if weekday in schedule_weekdays[habit.id] %}checked{% endif %}
+        />
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit" class="secondary-button">曜日を保存</button>
+  </fieldset>
+</form>

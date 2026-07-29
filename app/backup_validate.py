@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.backup_export import BACKUP_SCHEMA_VERSION
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES
@@ -26,6 +26,15 @@ BACKUP_TABLES_BY_VERSION = {
         "time_entries",
         "habits",
         "habit_active_periods",
+        "habit_completions",
+    ),
+    5: (
+        "tasks",
+        "daily_memos",
+        "time_entries",
+        "habits",
+        "habit_active_periods",
+        "habit_schedule_periods",
         "habit_completions",
     ),
 }
@@ -201,7 +210,6 @@ def validate_task(record: Any, index: int, errors: ErrorCollector) -> int | None
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
     validate_exact_keys(
         record,
         {"id", "title", "is_done", "created_at", "updated_at"},
@@ -219,8 +227,12 @@ def validate_task(record: Any, index: int, errors: ErrorCollector) -> int | None
     )
     if type(record.get("is_done")) is not bool:
         errors.add(f"{path}.is_done: 真偽値である必要があります。")
-    created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
-    updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    created_at = validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
+    updated_at = validate_utc_datetime_string(
+        record.get("updated_at"), f"{path}.updated_at", errors
+    )
     if created_at is not None and updated_at is not None and updated_at < created_at:
         errors.add(f"{path}.updated_at: created_at以降である必要があります。")
     return record_id
@@ -231,12 +243,15 @@ def validate_daily_memo(record: Any, index: int, errors: ErrorCollector) -> int 
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
-    validate_exact_keys(record, {"id", "memo_date", "content", "updated_at"}, path, errors)
+    validate_exact_keys(
+        record, {"id", "memo_date", "content", "updated_at"}, path, errors
+    )
     record_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
     validate_date_string(record.get("memo_date"), f"{path}.memo_date", errors)
     validate_string(record.get("content"), f"{path}.content", errors, max_length=5000)
-    validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    validate_utc_datetime_string(
+        record.get("updated_at"), f"{path}.updated_at", errors
+    )
     return record_id
 
 
@@ -245,7 +260,6 @@ def validate_time_entry(record: Any, index: int, errors: ErrorCollector) -> int 
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
     validate_exact_keys(
         record,
         {"id", "entry_date", "category", "minutes", "note", "created_at"},
@@ -265,7 +279,9 @@ def validate_time_entry(record: Any, index: int, errors: ErrorCollector) -> int 
     if type(minutes) is not int or not 1 <= minutes <= 1440:
         errors.add(f"{path}.minutes: 1〜1440の整数である必要があります。")
     validate_string(record.get("note"), f"{path}.note", errors, max_length=255)
-    validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
     return record_id
 
 
@@ -274,7 +290,6 @@ def validate_habit_v2(record: Any, index: int, errors: ErrorCollector) -> int | 
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
     validate_exact_keys(
         record,
         {"id", "name", "is_active", "created_at", "updated_at"},
@@ -292,8 +307,12 @@ def validate_habit_v2(record: Any, index: int, errors: ErrorCollector) -> int | 
     )
     if type(record.get("is_active")) is not bool:
         errors.add(f"{path}.is_active: 真偽値である必要があります。")
-    created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
-    updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    created_at = validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
+    updated_at = validate_utc_datetime_string(
+        record.get("updated_at"), f"{path}.updated_at", errors
+    )
     if created_at is not None and updated_at is not None and updated_at < created_at:
         errors.add(f"{path}.updated_at: created_at以降である必要があります。")
     return record_id
@@ -304,7 +323,6 @@ def validate_habit_v3(record: Any, index: int, errors: ErrorCollector) -> int | 
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
     validate_exact_keys(
         record,
         {"id", "name", "is_active", "archived_at", "created_at", "updated_at"},
@@ -323,13 +341,14 @@ def validate_habit_v3(record: Any, index: int, errors: ErrorCollector) -> int | 
     is_active = record.get("is_active")
     if type(is_active) is not bool:
         errors.add(f"{path}.is_active: 真偽値である必要があります。")
-
-    created_at = validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
-    updated_at = validate_utc_datetime_string(record.get("updated_at"), f"{path}.updated_at", errors)
+    created_at = validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
+    updated_at = validate_utc_datetime_string(
+        record.get("updated_at"), f"{path}.updated_at", errors
+    )
     archived_at = validate_nullable_utc_datetime_string(
-        record.get("archived_at"),
-        f"{path}.archived_at",
-        errors,
+        record.get("archived_at"), f"{path}.archived_at", errors
     )
     if created_at is not None and updated_at is not None and updated_at < created_at:
         errors.add(f"{path}.updated_at: created_at以降である必要があります。")
@@ -345,15 +364,12 @@ def validate_habit_v3(record: Any, index: int, errors: ErrorCollector) -> int | 
 
 
 def validate_habit_active_period(
-    record: Any,
-    index: int,
-    errors: ErrorCollector,
+    record: Any, index: int, errors: ErrorCollector
 ) -> int | None:
     path = f"data.habit_active_periods[{index}]"
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
     validate_exact_keys(
         record,
         {"id", "habit_id", "started_on", "ended_on", "created_at"},
@@ -362,39 +378,113 @@ def validate_habit_active_period(
     )
     record_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
     validate_positive_id(record.get("habit_id"), f"{path}.habit_id", errors)
-    started_on = validate_date_string(record.get("started_on"), f"{path}.started_on", errors)
-    ended_on = validate_nullable_date_string(record.get("ended_on"), f"{path}.ended_on", errors)
-    validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    started_on = validate_date_string(
+        record.get("started_on"), f"{path}.started_on", errors
+    )
+    ended_on = validate_nullable_date_string(
+        record.get("ended_on"), f"{path}.ended_on", errors
+    )
+    validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
     if started_on is not None and ended_on is not None and ended_on < started_on:
         errors.add(f"{path}.ended_on: started_on以降である必要があります。")
     return record_id
 
 
-def validate_habit_completion(record: Any, index: int, errors: ErrorCollector) -> int | None:
+def validate_weekdays(value: Any, path: str, errors: ErrorCollector) -> tuple[int, ...] | None:
+    if type(value) is not list:
+        errors.add(f"{path}: 配列である必要があります。")
+        return None
+    if not value:
+        errors.add(f"{path}: 月曜日0〜日曜日6から1つ以上必要です。")
+        return None
+    valid: list[int] = []
+    seen: set[int] = set()
+    for index, weekday in enumerate(value):
+        if type(weekday) is not int or not 0 <= weekday <= 6:
+            errors.add(f"{path}[{index}]: 0〜6の整数である必要があります。")
+            continue
+        if weekday in seen:
+            errors.add(f"{path}[{index}]: 曜日 {weekday} が重複しています。")
+            continue
+        seen.add(weekday)
+        valid.append(weekday)
+    return tuple(valid)
+
+
+def validate_habit_schedule_period(
+    record: Any, index: int, errors: ErrorCollector
+) -> int | None:
+    path = f"data.habit_schedule_periods[{index}]"
+    if type(record) is not dict:
+        errors.add(f"{path}: オブジェクトである必要があります。")
+        return None
+    validate_exact_keys(
+        record,
+        {
+            "id",
+            "habit_id",
+            "schedule_type",
+            "weekdays",
+            "started_on",
+            "ended_on",
+            "created_at",
+        },
+        path,
+        errors,
+    )
+    record_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
+    validate_positive_id(record.get("habit_id"), f"{path}.habit_id", errors)
+    if record.get("schedule_type") != "weekdays":
+        errors.add(f"{path}.schedule_type: weekdaysである必要があります。")
+    validate_weekdays(record.get("weekdays"), f"{path}.weekdays", errors)
+    started_on = validate_date_string(
+        record.get("started_on"), f"{path}.started_on", errors
+    )
+    ended_on = validate_nullable_date_string(
+        record.get("ended_on"), f"{path}.ended_on", errors
+    )
+    validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
+    if started_on is not None and ended_on is not None and ended_on < started_on:
+        errors.add(f"{path}.ended_on: started_on以降である必要があります。")
+    return record_id
+
+
+def validate_habit_completion(
+    record: Any, index: int, errors: ErrorCollector
+) -> int | None:
     path = f"data.habit_completions[{index}]"
     if type(record) is not dict:
         errors.add(f"{path}: オブジェクトである必要があります。")
         return None
-
-    validate_exact_keys(record, {"id", "habit_id", "completed_on", "created_at"}, path, errors)
+    validate_exact_keys(
+        record, {"id", "habit_id", "completed_on", "created_at"}, path, errors
+    )
     record_id = validate_positive_id(record.get("id"), f"{path}.id", errors)
     validate_positive_id(record.get("habit_id"), f"{path}.habit_id", errors)
     validate_date_string(record.get("completed_on"), f"{path}.completed_on", errors)
-    validate_utc_datetime_string(record.get("created_at"), f"{path}.created_at", errors)
+    validate_utc_datetime_string(
+        record.get("created_at"), f"{path}.created_at", errors
+    )
     return record_id
+
+
+Validator = Callable[[Any, int, ErrorCollector], int | None]
 
 
 def validate_records(
     records: Any,
     table_name: str,
-    validator: Any,
+    validator: Validator,
     errors: ErrorCollector,
 ) -> tuple[int | None, set[int]]:
     path = f"data.{table_name}"
     if type(records) is not list:
         errors.add(f"{path}: 配列である必要があります。")
         return None, set()
-
     seen_ids: set[int] = set()
     for index, record in enumerate(records):
         record_id = validator(record, index, errors)
@@ -406,14 +496,11 @@ def validate_records(
 
 
 def validate_habit_references(
-    data: dict[str, Any],
-    habit_ids: set[int],
-    errors: ErrorCollector,
+    data: dict[str, Any], habit_ids: set[int], errors: ErrorCollector
 ) -> None:
     records = data.get("habit_completions")
     if type(records) is not list:
         return
-
     seen_pairs: set[tuple[int, str]] = set()
     for index, record in enumerate(records):
         if type(record) is not dict:
@@ -421,7 +508,9 @@ def validate_habit_references(
         habit_id = record.get("habit_id")
         completed_on = record.get("completed_on")
         if type(habit_id) is int and habit_id not in habit_ids:
-            errors.add(f"data.habit_completions[{index}].habit_id: habitsに存在しないIDです。")
+            errors.add(
+                f"data.habit_completions[{index}].habit_id: habitsに存在しないIDです。"
+            )
         if type(habit_id) is int and type(completed_on) is str:
             pair = (habit_id, completed_on)
             if pair in seen_pairs:
@@ -432,60 +521,101 @@ def validate_habit_references(
             seen_pairs.add(pair)
 
 
-def validate_active_period_consistency(
-    data: dict[str, Any],
+def parse_period_records(
+    records: Any,
+    table_name: str,
     habit_ids: set[int],
     errors: ErrorCollector,
-) -> None:
-    period_records = data.get("habit_active_periods")
-    habit_records = data.get("habits")
-    completion_records = data.get("habit_completions")
-    if type(period_records) is not list or type(habit_records) is not list:
-        return
-
-    periods_by_habit: dict[int, list[tuple[date, date | None, int]]] = defaultdict(list)
+) -> dict[int, list[tuple[date, date | None, int, dict[str, Any]]]]:
+    grouped: dict[int, list[tuple[date, date | None, int, dict[str, Any]]]] = defaultdict(list)
     seen_starts: set[tuple[int, date]] = set()
-    for index, record in enumerate(period_records):
+    if type(records) is not list:
+        return grouped
+    for index, record in enumerate(records):
         if type(record) is not dict:
             continue
         habit_id = record.get("habit_id")
-        started_on_raw = record.get("started_on")
-        ended_on_raw = record.get("ended_on")
         if type(habit_id) is not int:
             continue
         if habit_id not in habit_ids:
-            errors.add(f"data.habit_active_periods[{index}].habit_id: habitsに存在しないIDです。")
+            errors.add(f"data.{table_name}[{index}].habit_id: habitsに存在しないIDです。")
             continue
         try:
-            started_on = date.fromisoformat(started_on_raw) if type(started_on_raw) is str else None
-            ended_on = date.fromisoformat(ended_on_raw) if type(ended_on_raw) is str else None
+            started_on = (
+                date.fromisoformat(record["started_on"])
+                if type(record.get("started_on")) is str
+                else None
+            )
+            ended_on = (
+                date.fromisoformat(record["ended_on"])
+                if type(record.get("ended_on")) is str
+                else None
+            )
         except ValueError:
             continue
         if started_on is None:
             continue
         pair = (habit_id, started_on)
         if pair in seen_starts:
+            label = "有効期間" if table_name == "habit_active_periods" else "曜日設定期間"
             errors.add(
-                f"data.habit_active_periods[{index}]: "
-                "同じ習慣・開始日の有効期間が重複しています。"
+                f"data.{table_name}[{index}]: 同じ習慣・開始日の{label}が重複しています。"
             )
         seen_starts.add(pair)
-        periods_by_habit[habit_id].append((started_on, ended_on, index))
+        grouped[habit_id].append((started_on, ended_on, index, record))
+    return grouped
 
-    habits_by_id: dict[int, dict[str, Any]] = {
+
+def validate_non_overlapping_periods(
+    grouped: dict[int, list[tuple[date, date | None, int, dict[str, Any]]]],
+    table_name: str,
+    label: str,
+    errors: ErrorCollector,
+) -> None:
+    for periods in grouped.values():
+        ordered = sorted(periods, key=lambda item: (item[0], item[2]))
+        previous_end: date | None = None
+        for position, (started_on, ended_on, index, _) in enumerate(ordered):
+            if position > 0 and (previous_end is None or started_on <= previous_end):
+                errors.add(
+                    f"data.{table_name}[{index}]: 同じ習慣の{label}が重複しています。"
+                )
+            previous_end = ended_on
+
+
+def build_habits_by_id(data: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    records = data.get("habits")
+    if type(records) is not list:
+        return {}
+    return {
         record["id"]: record
-        for record in habit_records
+        for record in records
         if type(record) is dict and type(record.get("id")) is int
     }
+
+
+def validate_active_period_consistency(
+    data: dict[str, Any],
+    habit_ids: set[int],
+    errors: ErrorCollector,
+) -> dict[int, list[tuple[date, date | None, int, dict[str, Any]]]]:
+    periods = parse_period_records(
+        data.get("habit_active_periods"),
+        "habit_active_periods",
+        habit_ids,
+        errors,
+    )
+    validate_non_overlapping_periods(
+        periods, "habit_active_periods", "有効期間", errors
+    )
+    habits_by_id = build_habits_by_id(data)
     for habit_id in habit_ids:
-        periods = sorted(periods_by_habit.get(habit_id, []), key=lambda item: item[0])
-        if not periods:
+        habit_periods = sorted(periods.get(habit_id, []), key=lambda item: item[0])
+        if not habit_periods:
             errors.add(f"data.habits: 習慣ID {habit_id} の有効期間がありません。")
             continue
-
-        open_count = sum(1 for _, ended_on, _ in periods if ended_on is None)
-        habit = habits_by_id.get(habit_id, {})
-        is_active = habit.get("is_active")
+        open_count = sum(1 for _, ended_on, _, _ in habit_periods if ended_on is None)
+        is_active = habits_by_id.get(habit_id, {}).get("is_active")
         if is_active is True and open_count != 1:
             errors.add(
                 f"data.habit_active_periods: アクティブな習慣ID {habit_id} は"
@@ -496,23 +626,13 @@ def validate_active_period_consistency(
                 f"data.habit_active_periods: 終了済み習慣ID {habit_id} に"
                 "開放中の有効期間があります。"
             )
-
-        previous_end: date | None = None
-        for position, (started_on, ended_on, index) in enumerate(periods):
-            if position > 0 and (previous_end is None or started_on <= previous_end):
-                errors.add(
-                    f"data.habit_active_periods[{index}]: "
-                    "同じ習慣の有効期間が重複しています。"
-                )
-            previous_end = ended_on
-
-        created_at_raw = habit.get("created_at")
+        created_at_raw = habits_by_id.get(habit_id, {}).get("created_at")
         if type(created_at_raw) is str:
             try:
                 created_on = datetime.fromisoformat(
                     created_at_raw.removesuffix("Z") + "+00:00"
                 ).date()
-                if periods[0][0] < created_on:
+                if habit_periods[0][0] < created_on:
                     errors.add(
                         f"data.habit_active_periods: 習慣ID {habit_id} の開始日が"
                         "習慣作成日より前です。"
@@ -520,27 +640,110 @@ def validate_active_period_consistency(
             except ValueError:
                 pass
 
+    completion_records = data.get("habit_completions")
+    if type(completion_records) is list:
+        for index, record in enumerate(completion_records):
+            if type(record) is not dict:
+                continue
+            habit_id = record.get("habit_id")
+            completed_raw = record.get("completed_on")
+            if type(habit_id) is not int or type(completed_raw) is not str:
+                continue
+            try:
+                completed_on = date.fromisoformat(completed_raw)
+            except ValueError:
+                continue
+            habit_periods = periods.get(habit_id, [])
+            if habit_periods and not any(
+                started <= completed_on and (ended is None or completed_on <= ended)
+                for started, ended, _, _ in habit_periods
+            ):
+                errors.add(
+                    f"data.habit_completions[{index}].completed_on: "
+                    "習慣の有効期間外の達成記録です。"
+                )
+    return periods
+
+
+def validate_schedule_period_consistency(
+    data: dict[str, Any],
+    habit_ids: set[int],
+    active_periods: dict[
+        int, list[tuple[date, date | None, int, dict[str, Any]]]
+    ],
+    errors: ErrorCollector,
+) -> None:
+    schedules = parse_period_records(
+        data.get("habit_schedule_periods"),
+        "habit_schedule_periods",
+        habit_ids,
+        errors,
+    )
+    validate_non_overlapping_periods(
+        schedules, "habit_schedule_periods", "曜日設定期間", errors
+    )
+    habits_by_id = build_habits_by_id(data)
+
+    for habit_id in habit_ids:
+        periods = sorted(schedules.get(habit_id, []), key=lambda item: item[0])
+        if not periods:
+            errors.add(f"data.habits: 習慣ID {habit_id} の曜日設定期間がありません。")
+            continue
+        open_count = sum(1 for _, ended_on, _, _ in periods if ended_on is None)
+        if open_count != 1:
+            errors.add(
+                f"data.habit_schedule_periods: 習慣ID {habit_id} は"
+                "開放中の曜日設定期間が1件必要です。"
+            )
+        created_at_raw = habits_by_id.get(habit_id, {}).get("created_at")
+        if type(created_at_raw) is str:
+            try:
+                created_on = datetime.fromisoformat(
+                    created_at_raw.removesuffix("Z") + "+00:00"
+                ).date()
+                if periods[0][0] < created_on:
+                    errors.add(
+                        f"data.habit_schedule_periods: 習慣ID {habit_id} の開始日が"
+                        "習慣作成日より前です。"
+                    )
+            except ValueError:
+                pass
+
+    completion_records = data.get("habit_completions")
     if type(completion_records) is not list:
         return
     for index, record in enumerate(completion_records):
         if type(record) is not dict:
             continue
         habit_id = record.get("habit_id")
-        completed_on_raw = record.get("completed_on")
-        if type(habit_id) is not int or type(completed_on_raw) is not str:
+        completed_raw = record.get("completed_on")
+        if type(habit_id) is not int or type(completed_raw) is not str:
             continue
         try:
-            completed_on = date.fromisoformat(completed_on_raw)
+            completed_on = date.fromisoformat(completed_raw)
         except ValueError:
             continue
-        periods = periods_by_habit.get(habit_id, [])
-        if periods and not any(
-            started_on <= completed_on and (ended_on is None or completed_on <= ended_on)
-            for started_on, ended_on, _ in periods
+        if active_periods.get(habit_id) and not any(
+            started <= completed_on and (ended is None or completed_on <= ended)
+            for started, ended, _, _ in active_periods[habit_id]
         ):
+            continue
+        matching = [
+            record_data
+            for started, ended, _, record_data in schedules.get(habit_id, [])
+            if started <= completed_on and (ended is None or completed_on <= ended)
+        ]
+        if not matching:
             errors.add(
                 f"data.habit_completions[{index}].completed_on: "
-                "習慣の有効期間外の達成記録です。"
+                "曜日設定期間外の達成記録です。"
+            )
+            continue
+        weekdays = matching[-1].get("weekdays")
+        if type(weekdays) is list and completed_on.weekday() not in weekdays:
+            errors.add(
+                f"data.habit_completions[{index}].completed_on: "
+                "対象曜日外の達成記録です。"
             )
 
 
@@ -579,28 +782,24 @@ def validate_backup_payload(payload: Any) -> list[str]:
         record_counts = {}
     else:
         validate_exact_keys(record_counts, set(table_names), "record_counts", errors)
-
     if type(data) is not dict:
         errors.add("$.data: オブジェクトである必要があります。")
         return errors.result()
     validate_exact_keys(data, set(table_names), "data", errors)
 
-    habit_validator = validate_habit_v3 if schema_version >= 3 else validate_habit_v2
-    validators = {
+    validators: dict[str, Validator] = {
         "tasks": validate_task,
         "daily_memos": validate_daily_memo,
         "time_entries": validate_time_entry,
-        "habits": habit_validator,
+        "habits": validate_habit_v3 if schema_version >= 3 else validate_habit_v2,
         "habit_active_periods": validate_habit_active_period,
+        "habit_schedule_periods": validate_habit_schedule_period,
         "habit_completions": validate_habit_completion,
     }
     ids_by_table: dict[str, set[int]] = {}
     for table_name in table_names:
         actual_count, record_ids = validate_records(
-            data.get(table_name),
-            table_name,
-            validators[table_name],
-            errors,
+            data.get(table_name), table_name, validators[table_name], errors
         )
         ids_by_table[table_name] = record_ids
         expected_count = record_counts.get(table_name)
@@ -614,13 +813,20 @@ def validate_backup_payload(payload: Any) -> list[str]:
 
     if schema_version >= 2:
         validate_habit_references(data, ids_by_table.get("habits", set()), errors)
+    active_periods: dict[
+        int, list[tuple[date, date | None, int, dict[str, Any]]]
+    ] = {}
     if schema_version >= 4:
-        validate_active_period_consistency(
+        active_periods = validate_active_period_consistency(
+            data, ids_by_table.get("habits", set()), errors
+        )
+    if schema_version >= 5:
+        validate_schedule_period_consistency(
             data,
             ids_by_table.get("habits", set()),
+            active_periods,
             errors,
         )
-
     return errors.result()
 
 
@@ -671,9 +877,13 @@ def run_cli(args: Sequence[str] | None = None) -> int:
         f"時間記録={counts['time_entries']}"
     )
     if payload["schema_version"] >= 2:
-        summary += f"、習慣={counts['habits']}、習慣達成={counts['habit_completions']}"
+        summary += (
+            f"、習慣={counts['habits']}、習慣達成={counts['habit_completions']}"
+        )
     if payload["schema_version"] >= 4:
         summary += f"、習慣有効期間={counts['habit_active_periods']}"
+    if payload["schema_version"] >= 5:
+        summary += f"、曜日設定期間={counts['habit_schedule_periods']}"
     print("バックアップは有効です。")
     print(f"レコード件数: {summary}")
     print(f"SHA-256: {digest}")

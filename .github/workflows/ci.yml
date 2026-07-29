@@ -50,4 +50,17 @@ jobs:
         run: python -c "from app.main import app; assert app.title == 'Home Panel'"
 
       - name: テストを実行
-        run: python -m pytest -q
+        run: |
+          set +e
+          python -m pytest -q --tb=short --disable-warnings > pytest.log 2>&1
+          status=$?
+          cat pytest.log
+          exit $status
+
+      - name: pytest失敗ログを保存
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-failure-log
+          path: pytest.log
+          retention-days: 3

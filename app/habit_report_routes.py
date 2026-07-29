@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 from app.crud import habit as habit_crud
 from app.db import get_db
 from app.habit_report import build_daily_report, build_period_report
+from app.habit_schedule import WEEKDAY_LABELS, format_schedule, mask_to_weekdays
 from app.schemas.habit import HabitCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 MONTH_PATTERN = re.compile(r"\d{4}-\d{2}\Z")
-WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 
 router = APIRouter(prefix="/habits", tags=["habit-reports"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -70,14 +70,30 @@ def render_habit_management(
     error_message: str | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
+    active_habits = habit_crud.list_active_habits(db)
+    archived_habits = habit_crud.list_archived_habits(db)
+    schedule_masks = {
+        habit.id: habit_crud.get_current_schedule_mask(db, habit.id)
+        for habit in [*active_habits, *archived_habits]
+    }
     return templates.TemplateResponse(
         "habit_manage.html",
         {
             "request": request,
-            "active_habits": habit_crud.list_active_habits(db),
-            "archived_habits": habit_crud.list_archived_habits(db),
+            "active_habits": active_habits,
+            "archived_habits": archived_habits,
             "active_count": habit_crud.count_active_habits(db),
             "max_active": habit_crud.MAX_ACTIVE_HABITS,
+            "weekday_options": tuple(enumerate(WEEKDAY_LABELS)),
+            "schedule_masks": schedule_masks,
+            "schedule_weekdays": {
+                habit_id: mask_to_weekdays(mask)
+                for habit_id, mask in schedule_masks.items()
+            },
+            "schedule_labels": {
+                habit_id: format_schedule(mask)
+                for habit_id, mask in schedule_masks.items()
+            },
             "error_message": error_message,
         },
         status_code=status_code,
@@ -227,6 +243,41 @@ def rename_habit(
         )
 
     habit_crud.rename_habit(db, habit_id, payload.name)
+    return RedirectResponse(url="/habits/manage", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{habit_id}/schedule")
+def update_habit_schedule(
+    request: Request,
+    habit_id: int,
+    weekdays: list[int] | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    if habit_crud.get_habit(db, habit_id) is None:
+        return render_habit_management(
+            request,
+            db,
+            "指定された習慣が存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        habit_crud.update_habit_schedule(db, habit_id, weekdays or [])
+    except habit_crud.HabitScheduleConflictError as exc:
+        return render_habit_management(
+            request,
+            db,
+            str(exc),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    except ValueError:
+        return render_habit_management(
+            request,
+            db,
+            "対象曜日を月曜日〜日曜日から1つ以上選択してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
     return RedirectResponse(url="/habits/manage", status_code=status.HTTP_303_SEE_OTHER)
 
 

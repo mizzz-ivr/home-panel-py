@@ -14,13 +14,19 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.habit_schedule import mask_to_weekdays
 from app.migrations import migrate_habit_schema
-from app.models.habit import Habit, HabitActivePeriod, HabitCompletion
+from app.models.habit import (
+    Habit,
+    HabitActivePeriod,
+    HabitCompletion,
+    HabitSchedulePeriod,
+)
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
 
-BACKUP_SCHEMA_VERSION = 4
+BACKUP_SCHEMA_VERSION = 5
 BASE_REQUIRED_TABLES = {
     "tasks",
     "daily_memos",
@@ -28,7 +34,11 @@ BASE_REQUIRED_TABLES = {
     "habits",
     "habit_completions",
 }
-REQUIRED_TABLES = {*BASE_REQUIRED_TABLES, "habit_active_periods"}
+REQUIRED_TABLES = {
+    *BASE_REQUIRED_TABLES,
+    "habit_active_periods",
+    "habit_schedule_periods",
+}
 
 
 def format_datetime(value: datetime) -> str:
@@ -66,6 +76,15 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             )
         ).all()
     )
+    habit_schedule_periods = list(
+        db.scalars(
+            select(HabitSchedulePeriod).order_by(
+                HabitSchedulePeriod.habit_id.asc(),
+                HabitSchedulePeriod.started_on.asc(),
+                HabitSchedulePeriod.id.asc(),
+            )
+        ).all()
+    )
     habit_completions = list(
         db.scalars(
             select(HabitCompletion).order_by(
@@ -86,6 +105,7 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             "time_entries": len(entries),
             "habits": len(habits),
             "habit_active_periods": len(habit_active_periods),
+            "habit_schedule_periods": len(habit_schedule_periods),
             "habit_completions": len(habit_completions),
         },
         "data": {
@@ -139,6 +159,18 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
                     "created_at": format_datetime(period.created_at),
                 }
                 for period in habit_active_periods
+            ],
+            "habit_schedule_periods": [
+                {
+                    "id": period.id,
+                    "habit_id": period.habit_id,
+                    "schedule_type": period.schedule_type,
+                    "weekdays": list(mask_to_weekdays(period.weekdays_mask)),
+                    "started_on": period.started_on.isoformat(),
+                    "ended_on": period.ended_on.isoformat() if period.ended_on is not None else None,
+                    "created_at": format_datetime(period.created_at),
+                }
+                for period in habit_schedule_periods
             ],
             "habit_completions": [
                 {

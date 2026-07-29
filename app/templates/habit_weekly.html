@@ -121,6 +121,7 @@
                 <span class="habit-progress-bar" style="--habit-rate: {{ summary.achievement_rate }}%"></span>
               </div>
               <div class="habit-report-item-meta">
+                <span>対象: {{ summary.schedule_label }}</span>
                 <span>{{ summary.completed_days }}/{{ summary.expected_days }}日達成</span>
                 <span>最長{{ summary.longest_streak }}日連続</span>
                 {% if summary.is_archived %}<span>終了済み</span>{% endif %}

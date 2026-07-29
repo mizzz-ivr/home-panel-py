@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy import Engine, inspect, text
 
+from app.habit_schedule import ALL_WEEKDAYS_MASK
+
 
 def migrate_habit_archived_at(engine: Engine) -> bool:
     """既存のhabitsテーブルへarchived_at列を追加し、終了済みデータを補完する。"""
@@ -124,9 +126,92 @@ def migrate_habit_active_periods(engine: Engine) -> bool:
     return created_table
 
 
+def migrate_habit_schedule_periods(engine: Engine) -> bool:
+    """対象曜日の適用期間テーブルを作成し、既存習慣を毎日対象で補完する。"""
+    inspector = inspect(engine)
+    if "habits" not in inspector.get_table_names():
+        return False
+
+    created_table = "habit_schedule_periods" not in inspector.get_table_names()
+    with engine.begin() as connection:
+        if created_table:
+            connection.execute(
+                text(
+                    "CREATE TABLE habit_schedule_periods ("
+                    "id INTEGER NOT NULL PRIMARY KEY, "
+                    "habit_id INTEGER NOT NULL, "
+                    "schedule_type VARCHAR(20) NOT NULL, "
+                    "weekdays_mask INTEGER NOT NULL, "
+                    "started_on DATE NOT NULL, "
+                    "ended_on DATE NULL, "
+                    "created_at DATETIME NOT NULL, "
+                    "CONSTRAINT uq_habit_schedule_period_start UNIQUE (habit_id, started_on), "
+                    "CONSTRAINT ck_habit_schedule_period_dates "
+                    "CHECK (ended_on IS NULL OR ended_on >= started_on), "
+                    "CONSTRAINT ck_habit_schedule_weekdays_mask "
+                    "CHECK (weekdays_mask BETWEEN 1 AND 127), "
+                    "CONSTRAINT ck_habit_schedule_type "
+                    "CHECK (schedule_type = 'weekdays'), "
+                    "FOREIGN KEY(habit_id) REFERENCES habits (id) ON DELETE CASCADE"
+                    ")"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_habit_schedule_periods_habit_id "
+                    "ON habit_schedule_periods (habit_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_habit_schedule_periods_started_on "
+                    "ON habit_schedule_periods (started_on)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_habit_schedule_periods_ended_on "
+                    "ON habit_schedule_periods (ended_on)"
+                )
+            )
+
+        connection.execute(
+            text(
+                "INSERT INTO habit_schedule_periods "
+                "(habit_id, schedule_type, weekdays_mask, started_on, ended_on, created_at) "
+                f"SELECT h.id, 'weekdays', {ALL_WEEKDAYS_MASK}, date(h.created_at), NULL, "
+                "CURRENT_TIMESTAMP FROM habits h "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 FROM habit_schedule_periods s WHERE s.habit_id = h.id"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE habit_schedule_periods SET ended_on = NULL "
+                "WHERE id IN ("
+                "SELECT latest.id FROM habit_schedule_periods latest "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 FROM habit_schedule_periods opened "
+                "WHERE opened.habit_id = latest.habit_id AND opened.ended_on IS NULL"
+                ") "
+                "AND latest.started_on = ("
+                "SELECT MAX(candidate.started_on) FROM habit_schedule_periods candidate "
+                "WHERE candidate.habit_id = latest.habit_id"
+                ")"
+                ")"
+            )
+        )
+
+    return created_table
+
+
 def migrate_habit_schema(engine: Engine) -> dict[str, bool]:
     """習慣関連の互換移行を順序どおり実行する。"""
+    archived_at_added = migrate_habit_archived_at(engine)
+    active_periods_created = migrate_habit_active_periods(engine)
+    migrate_habit_schedule_periods(engine)
     return {
-        "archived_at_added": migrate_habit_archived_at(engine),
-        "active_periods_created": migrate_habit_active_periods(engine),
+        "archived_at_added": archived_at_added,
+        "active_periods_created": active_periods_created,
     }

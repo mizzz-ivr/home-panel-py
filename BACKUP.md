@@ -9,6 +9,7 @@
 - 時間記録
 - 習慣
 - 習慣の有効期間
+- 習慣の曜日設定期間
 - 習慣の日次達成記録
 
 ダッシュボード設定を保存する`app_settings`は、現時点ではバックアップ対象外です。
@@ -44,11 +45,11 @@ DB本体と同じパスは、`--force`付きでも拒否します。
 
 ## 現在のJSON形式
 
-現在生成する形式はスキーマv4です。
+現在生成する形式はスキーマv5です。
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "application": "home-panel-py",
   "exported_at": "2026-07-28T12:34:56Z",
   "record_counts": {
@@ -57,6 +58,7 @@ DB本体と同じパスは、`--force`付きでも拒否します。
     "time_entries": 1,
     "habits": 1,
     "habit_active_periods": 2,
+    "habit_schedule_periods": 2,
     "habit_completions": 1
   },
   "data": {
@@ -66,7 +68,7 @@ DB本体と同じパスは、`--force`付きでも拒否します。
     "habits": [
       {
         "id": 1,
-        "name": "毎日読書",
+        "name": "読書",
         "is_active": true,
         "archived_at": null,
         "created_at": "2026-07-01T09:00:00Z",
@@ -89,12 +91,32 @@ DB本体と同じパスは、`--force`付きでも拒否します。
         "created_at": "2026-07-20T10:00:00Z"
       }
     ],
+    "habit_schedule_periods": [
+      {
+        "id": 1,
+        "habit_id": 1,
+        "schedule_type": "weekdays",
+        "weekdays": [0, 1, 2, 3, 4, 5, 6],
+        "started_on": "2026-07-01",
+        "ended_on": "2026-07-19",
+        "created_at": "2026-07-01T09:00:00Z"
+      },
+      {
+        "id": 2,
+        "habit_id": 1,
+        "schedule_type": "weekdays",
+        "weekdays": [0, 2, 4],
+        "started_on": "2026-07-20",
+        "ended_on": null,
+        "created_at": "2026-07-20T10:00:00Z"
+      }
+    ],
     "habit_completions": []
   }
 }
 ```
 
-アクティブ習慣の`archived_at`は`null`で、有効期間には`ended_on = null`の区間が1件あります。
+曜日はDB内部のビットマスクではなく、月曜日`0`〜日曜日`6`の配列として保存します。
 
 ## スキーマ互換性
 
@@ -106,19 +128,11 @@ DB本体と同じパスは、`--force`付きでも拒否します。
 
 ### v2
 
-v1へ以下を追加しました。
-
-- 習慣
-- 習慣の日次達成記録
-
-習慣の終了日時は専用項目を持ちません。
+v1へ習慣と日次達成記録を追加しました。
 
 ### v3
 
-v2の習慣データへ`archived_at`を追加しました。
-
-- アクティブ習慣: `archived_at = null`
-- 終了済み習慣: `archived_at`必須
+v2の習慣へ`archived_at`を追加しました。
 
 ### v4
 
@@ -128,7 +142,15 @@ v3へ`habit_active_periods`を追加しました。
 - 複数回の終了・再開履歴
 - 停止期間を除外した集計の復元根拠
 
-現在のバックアップ生成はv4です。検証CLIはv1〜v4を受け付けます。既存ファイルを自動で書き換える処理は行いません。
+### v5
+
+v4へ`habit_schedule_periods`を追加しました。
+
+- 曜日設定の適用開始日・終了日
+- 設定変更前の曜日履歴
+- 対象外曜日を除外した集計の復元根拠
+
+現在のバックアップ生成はv5です。検証CLIはv1〜v5を受け付けます。既存ファイルを自動で書き換える処理は行いません。
 
 ## 旧SQLiteを直接指定する場合
 
@@ -136,17 +158,28 @@ v3へ`habit_active_periods`を追加しました。
 
 1. `archived_at`列を追加
 2. 終了済み習慣は`updated_at`から終了日時を補完
-3. `habit_active_periods`テーブルを作成
-4. 既存習慣ごとに初期有効期間を1件生成
+3. `habit_active_periods`を作成
+4. 既存習慣ごとに初期有効期間を生成
+5. `habit_schedule_periods`を作成
+6. 既存習慣ごとに作成日からの「毎日」設定を生成
 
-初期区間:
+初期有効期間:
 
 - アクティブ習慣: `created_at`の日付から継続中
 - 終了済み習慣: `created_at`の日付から`archived_at`の日付まで
 
-移行前に複数回の停止・再開履歴が保存されていない場合、その過去区間は復元できません。
+初期曜日設定:
 
-バックアップCLIは通常読み取り専用ですが、この旧DB互換処理に限りスキーマと補完値を更新します。実行前にDBファイル自体のコピーも保管しておくと、より安全です。
+```text
+schedule_type = weekdays
+weekdays = [0, 1, 2, 3, 4, 5, 6]
+started_on = 習慣作成日
+ended_on = null
+```
+
+移行前に保存されていない過去の停止期間や曜日変更履歴は推測して復元できません。
+
+バックアップCLIは通常読み取り専用ですが、この旧DB互換処理に限りスキーマと補完値を更新します。実行前にDBファイル自体のコピーも保管してください。
 
 ## 安全性
 
@@ -167,7 +200,7 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 
 - UTF-8・JSON形式・重複キー
 - 50MiBのファイルサイズ上限
-- v1〜v4のスキーマ
+- v1〜v5のスキーマ
 - 必須項目と未知項目
 - レコード件数
 - ID重複
@@ -176,22 +209,32 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 - 習慣達成から習慣への参照整合性
 - 同じ習慣・日付の達成重複
 
-v3以降の習慣では以下も確認します。
+v3以降:
 
 - アクティブ習慣の`archived_at`はnull
 - 終了済み習慣の`archived_at`は必須
 - `archived_at >= created_at`
 - `updated_at >= archived_at`
 
-v4では以下も確認します。
+v4以降:
 
 - 有効期間が実在する習慣を参照する
 - 同じ習慣・開始日の重複がない
 - `ended_on >= started_on`
-- 同一習慣の区間が重複しない
+- 同一習慣の有効期間が交差しない
 - アクティブ習慣に開放区間が1件ある
 - 終了済み習慣に開放区間がない
 - 達成記録が有効期間内に存在する
+
+v5:
+
+- 曜日配列が1件以上で、0〜6の整数だけを含む
+- 曜日配列に重複がない
+- `schedule_type = weekdays`
+- 曜日設定期間が実在する習慣を参照する
+- 同一習慣の曜日設定期間が重複・交差しない
+- 各習慣に開放中の曜日設定期間が1件ある
+- 達成記録がその時点の対象曜日に存在する
 
 ## SHA-256を照合する
 
@@ -207,6 +250,7 @@ python -m app.backup_validate /path/to/home-panel-backup.json \
 - アクティブ・終了済み習慣を保存
 - `archived_at`を保存
 - 習慣の全有効期間を保存
+- 習慣の全曜日設定期間を保存
 - 過去の習慣達成記録を保存
 - 未来日として保存された時間記録も欠落防止のため保存
 - `app_settings`は対象外

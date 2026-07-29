@@ -12,7 +12,7 @@
       <header class="header card">
         <div>
           <h1>Home Panel</h1>
-          <p>習慣の編集・終了済み一覧・再開</p>
+          <p>習慣の編集・対象曜日・終了済み一覧・再開</p>
         </div>
         <div class="header-actions">
           <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
@@ -35,7 +35,7 @@
         <div class="card history-metric">
           <span>終了済み</span>
           <strong>{{ archived_habits|length }}件</strong>
-          <small>達成履歴は保持</small>
+          <small>達成履歴と曜日設定は保持</small>
         </div>
       </section>
 
@@ -43,7 +43,7 @@
         <div class="card-heading">
           <div>
             <h2 id="active-habits-heading">アクティブな習慣</h2>
-            <p class="hint">名前を変更しても過去の達成履歴は同じ習慣に紐づいたままです。</p>
+            <p class="hint">曜日設定は変更日から適用し、過去の集計条件は保持します。</p>
           </div>
         </div>
         <ul class="habit-management-list">
@@ -63,8 +63,10 @@
                 <button type="submit">名前を保存</button>
               </div>
             </form>
+            {% include "habit_schedule_form.html" %}
             <div class="habit-management-meta">
               <span>開始: {{ habit.created_at.strftime('%Y/%m/%d') }}</span>
+              <span>対象: {{ schedule_labels[habit.id] }}</span>
               <span class="status-badge active">利用中</span>
             </div>
           </li>
@@ -79,7 +81,7 @@
         <div class="card-heading">
           <div>
             <h2 id="archived-habits-heading">終了済みの習慣</h2>
-            <p class="hint">再開しても過去の達成履歴は失われません。</p>
+            <p class="hint">終了中でも曜日設定を変更でき、再開時から利用されます。</p>
           </div>
         </div>
         <ul class="habit-management-list">
@@ -99,10 +101,12 @@
                 <button type="submit" class="secondary-button">名前を保存</button>
               </div>
             </form>
+            {% include "habit_schedule_form.html" %}
             <div class="habit-management-footer">
               <div class="habit-management-meta">
                 <span>開始: {{ habit.created_at.strftime('%Y/%m/%d') }}</span>
                 <span>終了: {{ habit.archived_at.strftime('%Y/%m/%d') if habit.archived_at else '不明' }}</span>
+                <span>再開時の対象: {{ schedule_labels[habit.id] }}</span>
                 <span class="status-badge archived">終了済み</span>
               </div>
               <form action="/habits/{{ habit.id }}/restore" method="post">

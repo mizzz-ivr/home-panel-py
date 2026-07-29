@@ -13,7 +13,12 @@ from app.backup_export import (
     write_backup_file,
 )
 from app.db import Base
-from app.models.habit import Habit, HabitActivePeriod, HabitCompletion
+from app.models.habit import (
+    Habit,
+    HabitActivePeriod,
+    HabitCompletion,
+    HabitSchedulePeriod,
+)
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
@@ -35,8 +40,21 @@ def session(tmp_path: Path):
 def test_build_backup_payload_contains_all_tables_and_counts(session):
     created_at = datetime(2026, 7, 24, 1, 2, 3)
     archived_at = datetime(2026, 7, 24, 3, 0, 0)
-    session.add(Task(title="日本語タスク", is_done=True, created_at=created_at, updated_at=created_at))
-    session.add(DailyMemo(memo_date=date(2026, 7, 23), content="メモ内容", updated_at=created_at))
+    session.add(
+        Task(
+            title="日本語タスク",
+            is_done=True,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    session.add(
+        DailyMemo(
+            memo_date=date(2026, 7, 23),
+            content="メモ内容",
+            updated_at=created_at,
+        )
+    )
     session.add(
         TimeEntry(
             entry_date=date(2026, 7, 23),
@@ -47,7 +65,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         )
     )
     habit = Habit(
-        name="毎日読書",
+        name="平日読書",
         is_active=False,
         archived_at=archived_at,
         created_at=created_at,
@@ -60,6 +78,15 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
             habit_id=habit.id,
             started_on=date(2026, 7, 1),
             ended_on=date(2026, 7, 24),
+            created_at=created_at,
+        )
+    )
+    session.add(
+        HabitSchedulePeriod(
+            habit_id=habit.id,
+            schedule_type="weekdays",
+            weekdays_mask=31,
+            started_on=date(2026, 7, 1),
             created_at=created_at,
         )
     )
@@ -77,7 +104,7 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         exported_at=datetime(2026, 7, 24, 4, 5, 6, tzinfo=timezone.utc),
     )
 
-    assert payload["schema_version"] == 4
+    assert payload["schema_version"] == 5
     assert payload["application"] == "home-panel-py"
     assert payload["exported_at"] == "2026-07-24T04:05:06Z"
     assert payload["record_counts"] == {
@@ -86,16 +113,19 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         "time_entries": 1,
         "habits": 1,
         "habit_active_periods": 1,
+        "habit_schedule_periods": 1,
         "habit_completions": 1,
     }
     assert payload["data"]["tasks"][0]["title"] == "日本語タスク"
     assert payload["data"]["daily_memos"][0]["memo_date"] == "2026-07-23"
     assert payload["data"]["time_entries"][0]["category"] == "個人開発"
-    assert payload["data"]["habits"][0]["name"] == "毎日読書"
+    assert payload["data"]["habits"][0]["name"] == "平日読書"
     assert payload["data"]["habits"][0]["is_active"] is False
     assert payload["data"]["habits"][0]["archived_at"] == "2026-07-24T03:00:00Z"
     assert payload["data"]["habit_active_periods"][0]["started_on"] == "2026-07-01"
     assert payload["data"]["habit_active_periods"][0]["ended_on"] == "2026-07-24"
+    assert payload["data"]["habit_schedule_periods"][0]["schedule_type"] == "weekdays"
+    assert payload["data"]["habit_schedule_periods"][0]["weekdays"] == [0, 1, 2, 3, 4]
     assert payload["data"]["habit_completions"][0]["habit_id"] == habit.id
 
 
@@ -103,8 +133,20 @@ def test_build_backup_payload_is_deterministically_ordered(session):
     stamp = datetime(2026, 7, 24, 0, 0, 0)
     session.add_all(
         [
-            TimeEntry(entry_date=date(2026, 7, 24), category="作業", minutes=20, note="後", created_at=stamp),
-            TimeEntry(entry_date=date(2026, 7, 23), category="学習", minutes=10, note="先", created_at=stamp),
+            TimeEntry(
+                entry_date=date(2026, 7, 24),
+                category="作業",
+                minutes=20,
+                note="後",
+                created_at=stamp,
+            ),
+            TimeEntry(
+                entry_date=date(2026, 7, 23),
+                category="学習",
+                minutes=10,
+                note="先",
+                created_at=stamp,
+            ),
         ]
     )
     habit = Habit(name="習慣", created_at=stamp, updated_at=stamp)
@@ -123,8 +165,31 @@ def test_build_backup_payload_is_deterministically_ordered(session):
                 ended_on=date(2026, 7, 10),
                 created_at=stamp,
             ),
-            HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 24), created_at=stamp),
-            HabitCompletion(habit_id=habit.id, completed_on=date(2026, 7, 23), created_at=stamp),
+            HabitSchedulePeriod(
+                habit_id=habit.id,
+                schedule_type="weekdays",
+                weekdays_mask=31,
+                started_on=date(2026, 7, 20),
+                created_at=stamp,
+            ),
+            HabitSchedulePeriod(
+                habit_id=habit.id,
+                schedule_type="weekdays",
+                weekdays_mask=127,
+                started_on=date(2026, 7, 1),
+                ended_on=date(2026, 7, 19),
+                created_at=stamp,
+            ),
+            HabitCompletion(
+                habit_id=habit.id,
+                completed_on=date(2026, 7, 24),
+                created_at=stamp,
+            ),
+            HabitCompletion(
+                habit_id=habit.id,
+                completed_on=date(2026, 7, 23),
+                created_at=stamp,
+            ),
         ]
     )
     session.commit()
@@ -139,6 +204,9 @@ def test_build_backup_payload_is_deterministically_ordered(session):
         "2026-07-01",
         "2026-07-20",
     ]
+    assert [
+        item["started_on"] for item in payload["data"]["habit_schedule_periods"]
+    ] == ["2026-07-01", "2026-07-20"]
     assert [item["completed_on"] for item in payload["data"]["habit_completions"]] == [
         "2026-07-23",
         "2026-07-24",
@@ -155,6 +223,7 @@ def test_build_backup_payload_handles_empty_database(session):
         "time_entries": 0,
         "habits": 0,
         "habit_active_periods": 0,
+        "habit_schedule_periods": 0,
         "habit_completions": 0,
     }
     assert payload["data"] == {
@@ -163,6 +232,7 @@ def test_build_backup_payload_handles_empty_database(session):
         "time_entries": [],
         "habits": [],
         "habit_active_periods": [],
+        "habit_schedule_periods": [],
         "habit_completions": [],
     }
 
@@ -202,13 +272,20 @@ def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
 
     write_backup_file(session, output, overwrite=True)
 
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 4
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 5
 
 
 def test_default_output_path_uses_utc_timestamp():
-    output = default_output_path(datetime(2026, 7, 24, 12, 34, 56, tzinfo=timezone.utc))
+    output = default_output_path(
+        datetime(2026, 7, 24, 12, 34, 56, tzinfo=timezone.utc)
+    )
 
-    assert output == Path.home() / "HomePanelBackups" / "home-panel-backup-20260724T123456Z.json"
+    assert (
+        output
+        == Path.home()
+        / "HomePanelBackups"
+        / "home-panel-backup-20260724T123456Z.json"
+    )
 
 
 def test_run_cli_rejects_missing_database(tmp_path: Path, capsys):
@@ -243,11 +320,15 @@ def test_run_cli_handles_corrupted_database(tmp_path: Path, capsys):
 
 def test_run_cli_rejects_database_as_output_path(tmp_path: Path, capsys):
     database = tmp_path / "source.db"
-    engine = create_engine(f"sqlite:///{database}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{database}", connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(bind=engine)
     engine.dispose()
 
-    result = run_cli(["--database", str(database), "--output", str(database), "--force"])
+    result = run_cli(
+        ["--database", str(database), "--output", str(database), "--force"]
+    )
 
     assert result == 2
     assert "DB本体は指定できません" in capsys.readouterr().err
@@ -256,7 +337,9 @@ def test_run_cli_rejects_database_as_output_path(tmp_path: Path, capsys):
 
 def test_run_cli_creates_backup_from_specified_database(tmp_path: Path, capsys):
     database = tmp_path / "source.db"
-    engine = create_engine(f"sqlite:///{database}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{database}", connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     with session_factory() as db:
@@ -269,7 +352,10 @@ def test_run_cli_creates_backup_from_specified_database(tmp_path: Path, capsys):
 
     assert result == 0
     assert output.exists()
-    assert json.loads(output.read_text(encoding="utf-8"))["data"]["tasks"][0]["title"] == "CLIタスク"
+    assert (
+        json.loads(output.read_text(encoding="utf-8"))["data"]["tasks"][0]["title"]
+        == "CLIタスク"
+    )
     assert "バックアップを作成しました" in capsys.readouterr().out
 
 
@@ -277,25 +363,61 @@ def test_run_cli_migrates_legacy_habits_before_export(tmp_path: Path):
     database = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{database}")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title VARCHAR(255) NOT NULL, is_done BOOLEAN NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"))
-        connection.execute(text("CREATE TABLE daily_memos (id INTEGER PRIMARY KEY, memo_date DATE NOT NULL, content TEXT NOT NULL, updated_at DATETIME NOT NULL)"))
-        connection.execute(text("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, entry_date DATE NOT NULL, category VARCHAR(20) NOT NULL, minutes INTEGER NOT NULL, note VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)"))
-        connection.execute(text("CREATE TABLE habits (id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL, is_active BOOLEAN NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"))
-        connection.execute(text("CREATE TABLE habit_completions (id INTEGER PRIMARY KEY, habit_id INTEGER NOT NULL, completed_on DATE NOT NULL, created_at DATETIME NOT NULL)"))
-        connection.execute(text("INSERT INTO habits VALUES (1, '旧習慣', 0, '2026-07-01 00:00:00', '2026-07-10 00:00:00')"))
+        connection.execute(
+            text(
+                "CREATE TABLE tasks (id INTEGER PRIMARY KEY, title VARCHAR(255) NOT NULL, "
+                "is_done BOOLEAN NOT NULL, created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE daily_memos (id INTEGER PRIMARY KEY, memo_date DATE NOT NULL, "
+                "content TEXT NOT NULL, updated_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE time_entries (id INTEGER PRIMARY KEY, entry_date DATE NOT NULL, "
+                "category VARCHAR(20) NOT NULL, minutes INTEGER NOT NULL, "
+                "note VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE habits (id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL, "
+                "is_active BOOLEAN NOT NULL, created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE habit_completions (id INTEGER PRIMARY KEY, "
+                "habit_id INTEGER NOT NULL, completed_on DATE NOT NULL, "
+                "created_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO habits VALUES "
+                "(1, '旧習慣', 0, '2026-07-01 00:00:00', '2026-07-10 00:00:00')"
+            )
+        )
     engine.dispose()
     output = tmp_path / "legacy-backup.json"
 
     assert run_cli(["--database", str(database), "--output", str(output)]) == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 4
+    assert payload["schema_version"] == 5
     assert payload["data"]["habits"][0]["archived_at"] == "2026-07-10T00:00:00Z"
-    assert payload["data"]["habit_active_periods"] == [
-        {
-            "id": 1,
-            "habit_id": 1,
-            "started_on": "2026-07-01",
-            "ended_on": "2026-07-10",
-            "created_at": payload["data"]["habit_active_periods"][0]["created_at"],
-        }
+    assert payload["data"]["habit_active_periods"][0]["started_on"] == "2026-07-01"
+    assert payload["data"]["habit_active_periods"][0]["ended_on"] == "2026-07-10"
+    assert payload["data"]["habit_schedule_periods"][0]["weekdays"] == [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
     ]
