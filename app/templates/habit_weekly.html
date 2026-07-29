@@ -44,7 +44,7 @@
           </div>
           <p class="hint">選択した日を含む月曜日始まりの週を表示します。</p>
         </form>
-        <nav class="history-navigation" aria-label="週を移動">
+        <nav class="history-navigation" aria-label="週を移動・出力">
           {% if previous_week_start %}
           <a href="/habits/weekly?target_date={{ previous_week_start.isoformat() }}" class="button-link secondary-button">前の週</a>
           {% else %}
@@ -55,6 +55,11 @@
           {% else %}
           <span class="button-link disabled-button" aria-disabled="true">次の週</span>
           {% endif %}
+          <a
+            href="/habits/weekly.csv?target_date={{ week_start.isoformat() }}"
+            class="button-link secondary-button"
+            download
+          >この週をCSV出力</a>
         </nav>
       </section>
 
