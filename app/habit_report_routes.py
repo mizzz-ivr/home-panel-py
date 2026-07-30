@@ -361,7 +361,7 @@ def update_habit_completion(
     target_date: str = Form(...),
     completed: str = Form(...),
     db: Session = Depends(get_db),
-) -> HTMLResponse | RedirectResponse:
+) -> Response:
     today = date.today()
     parsed_date = parse_date(target_date)
     if parsed_date is None:
