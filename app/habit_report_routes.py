@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 from app.crud import habit as habit_crud
 from app.db import get_db
 from app.habit_report import build_daily_report, build_period_report
+from app.habit_report_csv import (
+    build_csv_download_response,
+    build_csv_error_response,
+    build_habit_report_csv,
+)
 from app.habit_schedule import WEEKDAY_LABELS, format_schedule, mask_to_weekdays
 from app.schemas.habit import HabitCreate
 
@@ -115,8 +120,12 @@ def render_daily_report(
             "request": request,
             "today": today,
             "selected_date": selected_date,
-            "previous_date": selected_date - timedelta(days=1) if selected_date > date.min else None,
-            "next_date": selected_date + timedelta(days=1) if selected_date < today else None,
+            "previous_date": selected_date - timedelta(days=1)
+            if selected_date > date.min
+            else None,
+            "next_date": selected_date + timedelta(days=1)
+            if selected_date < today
+            else None,
             "error_message": error_message,
             **report,
         },
@@ -374,6 +383,31 @@ def habit_weekly(
     return render_weekly_report(request, db, selected_date)
 
 
+@router.get("/weekly.csv")
+def export_habit_weekly_csv(
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> Response:
+    today = date.today()
+    selected_date = today
+    if target_date is not None:
+        parsed_date = parse_date(target_date)
+        if parsed_date is None:
+            return build_csv_error_response("日付はYYYY-MM-DD形式で指定してください。")
+        if parsed_date > today:
+            return build_csv_error_response(
+                "未来の日付は習慣の週次CSV出力に指定できません。"
+            )
+        selected_date = parsed_date
+
+    week_start = get_week_start(selected_date)
+    week_end = week_start + timedelta(days=6)
+    report = build_period_report(db, week_start, week_end, today)
+    csv_content = build_habit_report_csv("週次", week_start, week_end, report)
+    filename = f"home-panel-habit-weekly-{week_start.isoformat()}.csv"
+    return build_csv_download_response(csv_content, filename)
+
+
 @router.get("/monthly", response_class=HTMLResponse)
 def habit_monthly(
     request: Request,
@@ -403,3 +437,29 @@ def habit_monthly(
             )
         selected_month = parsed_month
     return render_monthly_report(request, db, selected_month)
+
+
+@router.get("/monthly.csv")
+def export_habit_monthly_csv(
+    target_month: str | None = None,
+    db: Session = Depends(get_db),
+) -> Response:
+    today = date.today()
+    current_month_start = today.replace(day=1)
+    selected_month = current_month_start
+    if target_month is not None:
+        parsed_month = parse_month(target_month)
+        if parsed_month is None:
+            return build_csv_error_response("月はYYYY-MM形式で指定してください。")
+        if parsed_month > current_month_start:
+            return build_csv_error_response(
+                "未来の月は習慣の月次CSV出力に指定できません。"
+            )
+        selected_month = parsed_month
+
+    month_start = selected_month.replace(day=1)
+    month_end = get_month_end(month_start)
+    report = build_period_report(db, month_start, month_end, today)
+    csv_content = build_habit_report_csv("月次", month_start, month_end, report)
+    filename = f"home-panel-habit-monthly-{month_start.strftime('%Y-%m')}.csv"
+    return build_csv_download_response(csv_content, filename)
