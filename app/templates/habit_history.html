@@ -42,6 +42,7 @@
             />
             <button type="submit">表示</button>
           </div>
+          <p class="hint">今日を含む過去日の達成状態を、下の習慣一覧から修正できます。</p>
         </form>
         <nav class="history-navigation" aria-label="日付を移動">
           {% if previous_date %}
@@ -96,6 +97,22 @@
               <span>{% if item.was_scheduled %}この日の達成対象{% elif item.was_active %}利用中・対象曜日外{% else %}達成記録のみ{% endif %}</span>
               {% if item.is_archived %}<span>終了済み</span>{% endif %}
             </div>
+            {% if item.was_scheduled or item.completed %}
+            <form
+              action="/habits/{{ item.habit.id }}/completion"
+              method="post"
+              class="habit-history-action"
+            >
+              <input type="hidden" name="target_date" value="{{ selected_date.isoformat() }}" />
+              {% if item.completed %}
+              <input type="hidden" name="completed" value="false" />
+              <button type="submit" class="secondary-button">達成を取り消す</button>
+              {% else %}
+              <input type="hidden" name="completed" value="true" />
+              <button type="submit">達成にする</button>
+              {% endif %}
+            </form>
+            {% endif %}
           </li>
           {% else %}
           <li class="empty-state">この日に対象となる習慣はありません。</li>
