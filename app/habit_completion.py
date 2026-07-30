@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
@@ -20,6 +21,20 @@ class CompletionUpdateResult(StrEnum):
     FUTURE_DATE = "future_date"
 
 
+class BulkCompletionUpdateStatus(StrEnum):
+    UPDATED = "updated"
+    UNCHANGED = "unchanged"
+    FUTURE_DATE = "future_date"
+
+
+@dataclass(frozen=True)
+class BulkCompletionUpdate:
+    status: BulkCompletionUpdateStatus
+    target_count: int = 0
+    created_count: int = 0
+    deleted_count: int = 0
+
+
 def get_completion(
     db: Session,
     habit_id: int,
@@ -30,6 +45,16 @@ def get_completion(
             HabitCompletion.habit_id == habit_id,
             HabitCompletion.completed_on == target_date,
         )
+    )
+
+
+def list_completions_on(db: Session, target_date: date) -> list[HabitCompletion]:
+    return list(
+        db.scalars(
+            select(HabitCompletion)
+            .where(HabitCompletion.completed_on == target_date)
+            .order_by(HabitCompletion.habit_id.asc(), HabitCompletion.id.asc())
+        ).all()
     )
 
 
@@ -77,3 +102,85 @@ def set_completion_on(
     db.delete(existing)
     db.commit()
     return CompletionUpdateResult.DELETED
+
+
+def get_expected_habit_ids(db: Session, target_date: date) -> set[int]:
+    return {
+        habit.id
+        for habit in habit_crud.list_all_habits(db)
+        if habit_crud.is_habit_expected_on(db, habit.id, target_date)
+    }
+
+
+def complete_all_expected_on(
+    db: Session,
+    target_date: date,
+    *,
+    latest_editable_date: date,
+) -> BulkCompletionUpdate:
+    """対象日の達成対象を1トランザクションですべて達成済みにする。"""
+
+    if target_date > latest_editable_date:
+        return BulkCompletionUpdate(BulkCompletionUpdateStatus.FUTURE_DATE)
+
+    expected_ids = get_expected_habit_ids(db, target_date)
+    existing_ids = {
+        completion.habit_id for completion in list_completions_on(db, target_date)
+    }
+    missing_ids = expected_ids - existing_ids
+    if not missing_ids:
+        return BulkCompletionUpdate(
+            BulkCompletionUpdateStatus.UNCHANGED,
+            target_count=len(expected_ids),
+        )
+
+    for habit_id in sorted(missing_ids):
+        db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing_ids = {
+            completion.habit_id for completion in list_completions_on(db, target_date)
+        }
+        missing_ids = expected_ids - existing_ids
+        if not missing_ids:
+            return BulkCompletionUpdate(
+                BulkCompletionUpdateStatus.UNCHANGED,
+                target_count=len(expected_ids),
+            )
+        for habit_id in sorted(missing_ids):
+            db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
+        db.commit()
+
+    return BulkCompletionUpdate(
+        BulkCompletionUpdateStatus.UPDATED,
+        target_count=len(expected_ids),
+        created_count=len(missing_ids),
+    )
+
+
+def clear_all_completions_on(
+    db: Session,
+    target_date: date,
+    *,
+    latest_editable_date: date,
+) -> BulkCompletionUpdate:
+    """対象日の達成記録を不整合記録も含めて1トランザクションで削除する。"""
+
+    if target_date > latest_editable_date:
+        return BulkCompletionUpdate(BulkCompletionUpdateStatus.FUTURE_DATE)
+
+    completions = list_completions_on(db, target_date)
+    if not completions:
+        return BulkCompletionUpdate(BulkCompletionUpdateStatus.UNCHANGED)
+
+    for completion in completions:
+        db.delete(completion)
+    db.commit()
+    return BulkCompletionUpdate(
+        BulkCompletionUpdateStatus.UPDATED,
+        target_count=len(completions),
+        deleted_count=len(completions),
+    )
