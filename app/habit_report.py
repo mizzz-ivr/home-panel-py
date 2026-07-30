@@ -71,7 +71,11 @@ def calculate_longest_streak(
     end_date: date,
     expected_dates: Sequence[date] | None = None,
 ) -> int:
-    targets = list(expected_dates) if expected_dates is not None else list(daterange(start_date, end_date))
+    targets = (
+        list(expected_dates)
+        if expected_dates is not None
+        else list(daterange(start_date, end_date))
+    )
     longest = 0
     current = 0
     for target_date in targets:
@@ -92,9 +96,17 @@ def group_periods_by_habit(periods: Sequence[Any]) -> dict[int, list[Any]]:
 
 def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
     habits = habit_crud.list_all_habits(db)
-    active_periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
-    schedule_periods_by_habit = group_periods_by_habit(habit_crud.list_schedule_periods(db))
-    completions = habit_crud.list_completions_between(db, selected_date, selected_date)
+    active_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_active_periods(db)
+    )
+    schedule_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_schedule_periods(db)
+    )
+    completions = habit_crud.list_completions_between(
+        db,
+        selected_date,
+        selected_date,
+    )
     completed_ids = {completion.habit_id for completion in completions}
 
     items: list[dict[str, Any]] = []
@@ -111,7 +123,10 @@ def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
         was_completed = habit.id in completed_ids
         if not was_active and not was_completed:
             continue
-        schedule_mask = get_schedule_mask_on(schedule_periods or (), selected_date) or ALL_WEEKDAYS_MASK
+        schedule_mask = (
+            get_schedule_mask_on(schedule_periods or (), selected_date)
+            or ALL_WEEKDAYS_MASK
+        )
         items.append(
             {
                 "habit": habit,
@@ -127,12 +142,15 @@ def build_daily_report(db: Session, selected_date: date) -> dict[str, Any]:
     completed_count = sum(
         1 for item in items if item["was_scheduled"] and item["completed"]
     )
-    achievement_rate = round(completed_count / expected_count * 100) if expected_count else 0
+    achievement_rate = (
+        round(completed_count / expected_count * 100) if expected_count else 0
+    )
 
     return {
         "items": items,
         "expected_count": expected_count,
         "completed_count": completed_count,
+        "recorded_count": len(completions),
         "achievement_rate": achievement_rate,
     }
 
@@ -145,8 +163,12 @@ def build_period_report(
 ) -> dict[str, Any]:
     effective_end = min(end_date, today)
     habits = habit_crud.list_all_habits(db)
-    active_periods_by_habit = group_periods_by_habit(habit_crud.list_active_periods(db))
-    schedule_periods_by_habit = group_periods_by_habit(habit_crud.list_schedule_periods(db))
+    active_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_active_periods(db)
+    )
+    schedule_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_schedule_periods(db)
+    )
     completions = habit_crud.list_completions_between(db, start_date, effective_end)
 
     completion_dates_by_habit: dict[int, set[date]] = defaultdict(set)
@@ -219,61 +241,60 @@ def build_period_report(
             expected_dates = [
                 target_date
                 for target_date in daterange(start_date, effective_end)
-                if is_habit_expected_on(habit, target_date, None, schedule_periods)
+                if is_habit_expected_on(
+                    habit,
+                    target_date,
+                    active_periods,
+                    schedule_periods,
+                )
             ]
-        expected_date_set = set(expected_dates)
-        completed_dates = completion_dates_by_habit[habit.id] & expected_date_set
-        if not expected_dates and not completed_dates:
-            continue
-
+        completed_dates = completion_dates_by_habit.get(habit.id, set())
+        completed_days = len(completed_dates & set(expected_dates))
         expected_days = len(expected_dates)
-        completed_days = len(completed_dates)
+        has_completion = any(
+            start_date <= completed_on <= effective_end
+            for completed_on in completed_dates
+        )
+        if expected_days == 0 and not has_completion:
+            continue
         achievement_rate = (
             round(completed_days / expected_days * 100) if expected_days else 0
         )
         current_mask = (
             get_schedule_mask_on(schedule_periods, effective_end)
-            if effective_end >= start_date
-            else None
-        ) or ALL_WEEKDAYS_MASK
+            if schedule_periods
+            else ALL_WEEKDAYS_MASK
+        )
         habit_summaries.append(
             {
                 "habit": habit,
-                "expected_days": expected_days,
                 "completed_days": completed_days,
+                "expected_days": expected_days,
                 "achievement_rate": achievement_rate,
                 "longest_streak": calculate_longest_streak(
                     completed_dates,
                     start_date,
                     effective_end,
                     expected_dates,
-                )
-                if effective_end >= start_date
-                else 0,
-                "schedule_label": format_schedule(current_mask),
+                ),
                 "is_archived": not habit.is_active,
                 "active_period_count": len(active_periods),
                 "schedule_period_count": len(schedule_periods),
+                "schedule_label": format_schedule(
+                    current_mask if current_mask is not None else ALL_WEEKDAYS_MASK
+                ),
             }
         )
 
-    habit_summaries.sort(
-        key=lambda item: (
-            -item["achievement_rate"],
-            -item["completed_days"],
-            item["habit"].created_at,
-            item["habit"].id,
-        )
+    achievement_rate = (
+        round(total_completed / total_expected * 100) if total_expected else 0
     )
-
     return {
         "effective_end": effective_end,
-        "total_expected": total_expected,
-        "total_completed": total_completed,
-        "achievement_rate": (
-            round(total_completed / total_expected * 100) if total_expected else 0
-        ),
-        "perfect_days": perfect_days,
         "daily_summaries": daily_summaries,
         "habit_summaries": habit_summaries,
+        "total_expected": total_expected,
+        "total_completed": total_completed,
+        "achievement_rate": achievement_rate,
+        "perfect_days": perfect_days,
     }
