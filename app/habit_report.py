@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import date, timedelta
 from typing import Any
 
@@ -33,7 +33,7 @@ def calculate_longest_streak(
     completed_dates: set[date],
     start_date: date,
     end_date: date,
-    expected_dates: list[date] | None = None,
+    expected_dates: Sequence[date] | None = None,
 ) -> int:
     targets = list(expected_dates) if expected_dates is not None else list(daterange(start_date, end_date))
     longest = 0
