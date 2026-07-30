@@ -9,6 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
+from app.habit_report import (
+    group_periods_by_habit,
+    is_habit_expected_on as is_report_habit_expected_on,
+)
 from app.models.habit import HabitCompletion
 
 
@@ -58,6 +62,26 @@ def list_completions_on(db: Session, target_date: date) -> list[HabitCompletion]
     )
 
 
+def get_expected_habit_ids(db: Session, target_date: date) -> set[int]:
+    habits = habit_crud.list_all_habits(db)
+    active_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_active_periods(db)
+    )
+    schedule_periods_by_habit = group_periods_by_habit(
+        habit_crud.list_schedule_periods(db)
+    )
+    return {
+        habit.id
+        for habit in habits
+        if is_report_habit_expected_on(
+            habit,
+            target_date,
+            active_periods_by_habit.get(habit.id),
+            schedule_periods_by_habit.get(habit.id),
+        )
+    }
+
+
 def set_completion_on(
     db: Session,
     habit_id: int,
@@ -83,7 +107,7 @@ def set_completion_on(
     if completed:
         if existing is not None:
             return CompletionUpdateResult.UNCHANGED
-        if not habit_crud.is_habit_expected_on(db, habit_id, target_date):
+        if habit_id not in get_expected_habit_ids(db, target_date):
             return CompletionUpdateResult.NOT_EXPECTED
 
         db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
@@ -102,14 +126,6 @@ def set_completion_on(
     db.delete(existing)
     db.commit()
     return CompletionUpdateResult.DELETED
-
-
-def get_expected_habit_ids(db: Session, target_date: date) -> set[int]:
-    return {
-        habit.id
-        for habit in habit_crud.list_all_habits(db)
-        if habit_crud.is_habit_expected_on(db, habit.id, target_date)
-    }
 
 
 def complete_all_expected_on(
