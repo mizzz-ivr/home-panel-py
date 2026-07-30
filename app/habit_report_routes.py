@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
 from app.db import get_db
+from app.habit_completion import CompletionUpdateResult, set_completion_on
 from app.habit_report import build_daily_report, build_period_report
 from app.habit_report_csv import (
     build_csv_download_response,
@@ -351,6 +352,79 @@ def habit_history(
             )
         selected_date = parsed_date
     return render_daily_report(request, db, selected_date)
+
+
+@router.post("/{habit_id}/completion")
+def update_habit_completion(
+    request: Request,
+    habit_id: int,
+    target_date: str = Form(...),
+    completed: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse | RedirectResponse:
+    today = date.today()
+    parsed_date = parse_date(target_date)
+    if parsed_date is None:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "日付はYYYY-MM-DD形式で指定してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if parsed_date > today:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "未来の日付の達成状態は変更できません。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if completed not in {"true", "false"}:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "達成状態が不正です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    result = set_completion_on(
+        db,
+        habit_id,
+        parsed_date,
+        completed=completed == "true",
+        latest_editable_date=today,
+    )
+    if result == CompletionUpdateResult.NOT_FOUND:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "指定された習慣が存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if result == CompletionUpdateResult.NOT_EXPECTED:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "この日は習慣の有効期間または対象曜日の範囲外です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if result == CompletionUpdateResult.FUTURE_DATE:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "未来の日付の達成状態は変更できません。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return RedirectResponse(
+        url=f"/habits/history?target_date={parsed_date.isoformat()}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/weekly", response_class=HTMLResponse)
