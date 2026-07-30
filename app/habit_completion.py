@@ -9,10 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
-from app.habit_report import (
-    group_periods_by_habit,
-    is_habit_expected_on as is_report_habit_expected_on,
-)
+from app.habit_eligibility import group_periods_by_habit, is_habit_expected_on
 from app.models.habit import HabitCompletion
 
 
@@ -73,7 +70,7 @@ def get_expected_habit_ids(db: Session, target_date: date) -> set[int]:
     return {
         habit.id
         for habit in habits
-        if is_report_habit_expected_on(
+        if is_habit_expected_on(
             habit,
             target_date,
             active_periods_by_habit.get(habit.id),
