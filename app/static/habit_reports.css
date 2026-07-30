@@ -44,6 +44,16 @@
   font-size: 0.9rem;
 }
 
+.habit-history-action {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.habit-history-action button {
+  width: auto;
+}
+
 .habit-status {
   display: inline-flex;
   align-items: center;
@@ -165,6 +175,10 @@
 }
 
 @media (max-width: 640px) {
+  .habit-history-action button {
+    width: 100%;
+  }
+
   .habit-calendar {
     gap: 4px;
   }
