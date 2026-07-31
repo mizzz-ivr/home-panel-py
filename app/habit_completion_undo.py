@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any, Iterable
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.app_setting import AppSetting
@@ -226,6 +227,27 @@ def record_completion_undo(
     set_undo_setting(db, action)
     db.commit()
     return action
+
+
+def record_completion_undo_best_effort(
+    db: Session,
+    target_date: date,
+    before_habit_ids: Iterable[int],
+    after_habit_ids: Iterable[int],
+    *,
+    source: str,
+) -> HabitCompletionUndoAction | None:
+    try:
+        return record_completion_undo(
+            db,
+            target_date,
+            before_habit_ids,
+            after_habit_ids,
+            source=source,
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        return None
 
 
 def clear_completion_undo(db: Session) -> bool:
