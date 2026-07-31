@@ -176,6 +176,7 @@ def complete_all_expected_on(
         existing_ids = {
             completion.habit_id for completion in list_completions_on(db, target_date)
         }
+        before_ids = tuple(sorted(existing_ids))
         missing_ids = expected_ids - existing_ids
         if not missing_ids:
             return BulkCompletionUpdate(
