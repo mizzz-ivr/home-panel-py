@@ -105,6 +105,40 @@
       </section>
       {% endif %}
 
+      {% if expected_count > 0 or recorded_count > 0 %}
+      <section class="card habit-selected-actions" aria-labelledby="habit-selected-actions-heading">
+        <div>
+          <h2 id="habit-selected-actions-heading">習慣を選んで操作</h2>
+          <p class="hint">
+            下の一覧で選んだ習慣だけを更新します。達成にする場合は、選択した全項目がこの日の対象習慣であることを確認します。
+          </p>
+        </div>
+        <form
+          id="selected-habit-completion-form"
+          action="/habits/completions/selected"
+          method="post"
+          class="habit-selected-action-form"
+          data-confirm="選択した習慣の達成状態を更新します。よろしいですか？"
+        >
+          <input type="hidden" name="target_date" value="{{ selected_date.isoformat() }}" />
+          <p class="habit-selected-count">下の一覧から1件以上選択してください。</p>
+          <div class="habit-bulk-action-buttons">
+            <button type="submit" name="completed" value="true">
+              選択した習慣を達成
+            </button>
+            <button
+              type="submit"
+              name="completed"
+              value="false"
+              class="secondary-button"
+            >
+              選択した達成を取り消す
+            </button>
+          </div>
+        </form>
+      </section>
+      {% endif %}
+
       <section class="card" aria-labelledby="habit-history-list-heading">
         <div class="card-heading">
           <h2 id="habit-history-list-heading">習慣ごとの結果</h2>
@@ -113,7 +147,21 @@
           {% for item in items %}
           <li class="habit-report-item">
             <div class="habit-report-item-header">
-              <strong>{{ item.habit.name }}</strong>
+              <div class="habit-report-item-title">
+                {% if item.was_scheduled or item.completed %}
+                <label class="habit-selection-control">
+                  <input
+                    type="checkbox"
+                    name="habit_ids"
+                    value="{{ item.habit.id }}"
+                    form="selected-habit-completion-form"
+                    aria-label="{{ item.habit.name }}を選択"
+                  />
+                  <span>選択</span>
+                </label>
+                {% endif %}
+                <strong>{{ item.habit.name }}</strong>
+              </div>
               {% if item.was_scheduled and item.completed %}
               <span class="habit-status completed">達成</span>
               {% elif item.was_scheduled %}
