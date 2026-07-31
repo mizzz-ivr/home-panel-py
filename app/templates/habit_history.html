@@ -73,6 +73,38 @@
         </div>
       </section>
 
+      {% if completed_count < expected_count or recorded_count > 0 %}
+      <section class="card habit-bulk-actions" aria-labelledby="habit-bulk-actions-heading">
+        <div>
+          <h2 id="habit-bulk-actions-heading">この日の一括操作</h2>
+          <p class="hint">
+            一括達成は有効期間と対象曜日を満たす未達成習慣だけを追加します。
+            一括取り消しは対象外の記録を含む、この日の全達成記録を削除します。
+          </p>
+        </div>
+        <div class="habit-bulk-action-buttons">
+          {% if completed_count < expected_count %}
+          <form action="/habits/completions/bulk" method="post">
+            <input type="hidden" name="target_date" value="{{ selected_date.isoformat() }}" />
+            <input type="hidden" name="action" value="complete_expected" />
+            <button type="submit">対象習慣をすべて達成</button>
+          </form>
+          {% endif %}
+          {% if recorded_count > 0 %}
+          <form
+            action="/habits/completions/bulk"
+            method="post"
+            data-confirm="{{ selected_date.strftime('%Y年%m月%d日') }}の達成記録をすべて取り消します。よろしいですか？"
+          >
+            <input type="hidden" name="target_date" value="{{ selected_date.isoformat() }}" />
+            <input type="hidden" name="action" value="clear_all" />
+            <button type="submit" class="secondary-button">この日の達成をすべて取り消す</button>
+          </form>
+          {% endif %}
+        </div>
+      </section>
+      {% endif %}
+
       <section class="card" aria-labelledby="habit-history-list-heading">
         <div class="card-heading">
           <h2 id="habit-history-list-heading">習慣ごとの結果</h2>

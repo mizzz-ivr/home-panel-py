@@ -9,6 +9,15 @@
     }, 4000);
   }
 
+  document.querySelectorAll('form[data-confirm]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const message = form.dataset.confirm;
+      if (message && !window.confirm(message)) {
+        event.preventDefault();
+      }
+    });
+  });
+
   const container = document.querySelector('[data-swapy-container]');
   const preferencesData = document.querySelector('#dashboard-preferences-data');
   const resetButton = document.querySelector('#reset-layout');

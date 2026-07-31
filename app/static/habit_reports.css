@@ -54,6 +54,33 @@
   width: auto;
 }
 
+.habit-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.habit-bulk-actions h2 {
+  margin-bottom: 4px;
+}
+
+.habit-bulk-action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.habit-bulk-action-buttons form {
+  margin: 0;
+}
+
+.habit-bulk-action-buttons button {
+  width: auto;
+}
+
 .habit-status {
   display: inline-flex;
   align-items: center;
@@ -172,10 +199,22 @@
   .habit-report-grid {
     grid-template-columns: 1fr;
   }
+
+  .habit-bulk-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .habit-bulk-action-buttons {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
-  .habit-history-action button {
+  .habit-history-action button,
+  .habit-bulk-action-buttons,
+  .habit-bulk-action-buttons form,
+  .habit-bulk-action-buttons button {
     width: 100%;
   }
 
