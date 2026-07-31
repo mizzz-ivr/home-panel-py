@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -11,14 +14,23 @@ from app.habit_completion_undo import (
     undo_completion_change,
     utc_now,
 )
-from app.habit_report_routes_shared import parse_date
 
 router = APIRouter(prefix="/completions", tags=["habit-completion-undo"])
+DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 
 NO_STORE_HEADERS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
 }
+
+
+def parse_date(value: str) -> date | None:
+    if not DATE_PATTERN.fullmatch(value):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 @router.get("/undo")
