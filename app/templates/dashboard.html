@@ -6,6 +6,7 @@
     <title>Home Panel</title>
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/habit_undo.css" />
   </head>
   <body>
     <main class="container">
@@ -24,6 +25,14 @@
       {% if error_message %}
       <section class="card error" role="alert">{{ error_message }}</section>
       {% endif %}
+
+      <div
+        class="habit-undo-container"
+        data-habit-undo
+        data-target-date="{{ today.isoformat() }}"
+        aria-live="polite"
+        hidden
+      ></div>
 
       <details class="card dashboard-settings">
         <summary>ダッシュボードの表示設定</summary>
@@ -72,5 +81,6 @@
     </main>
     <script src="https://unpkg.com/swapy@1.0.5/dist/swapy.min.js" defer></script>
     <script src="/static/app.js" defer></script>
+    <script src="/static/habit_undo.js" defer></script>
   </body>
 </html>
