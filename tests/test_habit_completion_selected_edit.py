@@ -108,14 +108,13 @@ def post_selected(
     target_date: str = "2026-07-28",
     completed: str = "true",
 ):
-    data = [
-        ("target_date", target_date),
-        ("completed", completed),
-        *(("habit_ids", habit_id) for habit_id in habit_ids),
-    ]
     return client.post(
         "/habits/completions/selected",
-        data=data,
+        data={
+            "target_date": target_date,
+            "completed": completed,
+            "habit_ids": habit_ids,
+        },
         follow_redirects=False,
     )
 
@@ -371,16 +370,17 @@ def test_history_page_wires_checkboxes_to_external_selected_form(
     second_id = create_habit(client, "運動")
 
     response = client.get("/habits/history?target_date=2026-07-28")
+    normalized_html = " ".join(response.text.split())
 
     assert response.status_code == 200
-    assert 'id="selected-habit-completion-form"' in response.text
-    assert 'action="/habits/completions/selected"' in response.text
-    assert 'name="completed" value="true"' in response.text
-    assert 'name="completed" value="false"' in response.text
-    assert response.text.count('name="habit_ids"') == 2
-    assert f'value="{first_id}"' in response.text
-    assert f'value="{second_id}"' in response.text
-    assert response.text.count('form="selected-habit-completion-form"') == 2
-    assert "選択した習慣を達成" in response.text
-    assert "選択した達成を取り消す" in response.text
-    assert "data-confirm=" in response.text
+    assert 'id="selected-habit-completion-form"' in normalized_html
+    assert 'action="/habits/completions/selected"' in normalized_html
+    assert 'name="completed" value="true"' in normalized_html
+    assert 'name="completed" value="false"' in normalized_html
+    assert normalized_html.count('name="habit_ids"') == 2
+    assert f'value="{first_id}"' in normalized_html
+    assert f'value="{second_id}"' in normalized_html
+    assert normalized_html.count('form="selected-habit-completion-form"') == 2
+    assert "選択した習慣を達成" in normalized_html
+    assert "選択した達成を取り消す" in normalized_html
+    assert "data-confirm=" in normalized_html
