@@ -9,6 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
+from app.habit_completion_undo import (
+    get_completion_habit_ids,
+    record_completion_undo_best_effort,
+)
 from app.habit_eligibility import group_periods_by_habit, is_habit_expected_on
 from app.models.habit import HabitCompletion
 
@@ -107,6 +111,7 @@ def set_completion_on(
         if habit_id not in get_expected_habit_ids(db, target_date):
             return CompletionUpdateResult.NOT_EXPECTED
 
+        before_ids = get_completion_habit_ids(db, target_date)
         db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
         try:
             db.commit()
@@ -115,13 +120,28 @@ def set_completion_on(
             if get_completion(db, habit_id, target_date) is not None:
                 return CompletionUpdateResult.UNCHANGED
             raise
+        record_completion_undo_best_effort(
+            db,
+            target_date,
+            before_ids,
+            get_completion_habit_ids(db, target_date),
+            source="single_complete",
+        )
         return CompletionUpdateResult.CREATED
 
     if existing is None:
         return CompletionUpdateResult.UNCHANGED
 
+    before_ids = get_completion_habit_ids(db, target_date)
     db.delete(existing)
     db.commit()
+    record_completion_undo_best_effort(
+        db,
+        target_date,
+        before_ids,
+        get_completion_habit_ids(db, target_date),
+        source="single_clear",
+    )
     return CompletionUpdateResult.DELETED
 
 
@@ -137,9 +157,8 @@ def complete_all_expected_on(
         return BulkCompletionUpdate(BulkCompletionUpdateStatus.FUTURE_DATE)
 
     expected_ids = get_expected_habit_ids(db, target_date)
-    existing_ids = {
-        completion.habit_id for completion in list_completions_on(db, target_date)
-    }
+    before_ids = get_completion_habit_ids(db, target_date)
+    existing_ids = set(before_ids)
     missing_ids = expected_ids - existing_ids
     if not missing_ids:
         return BulkCompletionUpdate(
@@ -167,6 +186,13 @@ def complete_all_expected_on(
             db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
         db.commit()
 
+    record_completion_undo_best_effort(
+        db,
+        target_date,
+        before_ids,
+        get_completion_habit_ids(db, target_date),
+        source="bulk_complete",
+    )
     return BulkCompletionUpdate(
         BulkCompletionUpdateStatus.UPDATED,
         target_count=len(expected_ids),
@@ -189,9 +215,17 @@ def clear_all_completions_on(
     if not completions:
         return BulkCompletionUpdate(BulkCompletionUpdateStatus.UNCHANGED)
 
+    before_ids = tuple(completion.habit_id for completion in completions)
     for completion in completions:
         db.delete(completion)
     db.commit()
+    record_completion_undo_best_effort(
+        db,
+        target_date,
+        before_ids,
+        (),
+        source="bulk_clear",
+    )
     return BulkCompletionUpdate(
         BulkCompletionUpdateStatus.UPDATED,
         target_count=len(completions),
