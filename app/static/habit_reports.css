@@ -39,9 +39,33 @@
   flex-wrap: wrap;
 }
 
+.habit-report-item-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .habit-report-item-meta {
   color: #475569;
   font-size: 0.9rem;
+}
+
+.habit-selection-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.habit-selection-control input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #2563eb;
 }
 
 .habit-history-action {
@@ -54,7 +78,8 @@
   width: auto;
 }
 
-.habit-bulk-actions {
+.habit-bulk-actions,
+.habit-selected-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -62,8 +87,22 @@
   margin-bottom: 16px;
 }
 
-.habit-bulk-actions h2 {
+.habit-bulk-actions h2,
+.habit-selected-actions h2 {
   margin-bottom: 4px;
+}
+
+.habit-selected-action-form {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  margin: 0;
+}
+
+.habit-selected-count {
+  margin: 0;
+  color: #475569;
+  font-size: 0.9rem;
 }
 
 .habit-bulk-action-buttons {
@@ -200,9 +239,14 @@
     grid-template-columns: 1fr;
   }
 
-  .habit-bulk-actions {
+  .habit-bulk-actions,
+  .habit-selected-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .habit-selected-action-form {
+    justify-items: start;
   }
 
   .habit-bulk-action-buttons {
@@ -214,8 +258,14 @@
   .habit-history-action button,
   .habit-bulk-action-buttons,
   .habit-bulk-action-buttons form,
-  .habit-bulk-action-buttons button {
+  .habit-bulk-action-buttons button,
+  .habit-selected-action-form {
     width: 100%;
+  }
+
+  .habit-report-item-title {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .habit-calendar {
