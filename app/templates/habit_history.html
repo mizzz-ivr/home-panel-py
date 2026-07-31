@@ -118,12 +118,12 @@
           action="/habits/completions/selected"
           method="post"
           class="habit-selected-action-form"
-          data-selected-habit-form
+          data-confirm="選択した習慣の達成状態を更新します。よろしいですか？"
         >
           <input type="hidden" name="target_date" value="{{ selected_date.isoformat() }}" />
-          <p id="selected-habit-count" class="habit-selected-count" aria-live="polite">習慣を選択してください。</p>
+          <p class="habit-selected-count">下の一覧から1件以上選択してください。</p>
           <div class="habit-bulk-action-buttons">
-            <button type="submit" name="completed" value="true" data-selected-submit>
+            <button type="submit" name="completed" value="true">
               選択した習慣を達成
             </button>
             <button
@@ -131,8 +131,6 @@
               name="completed"
               value="false"
               class="secondary-button"
-              data-selected-submit
-              data-confirm="選択した習慣の達成記録を取り消します。よろしいですか？"
             >
               選択した達成を取り消す
             </button>
@@ -158,7 +156,6 @@
                     value="{{ item.habit.id }}"
                     form="selected-habit-completion-form"
                     aria-label="{{ item.habit.name }}を選択"
-                    data-habit-selection
                   />
                   <span>選択</span>
                 </label>
