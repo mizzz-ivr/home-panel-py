@@ -26,11 +26,16 @@ from app.habit_report_csv import (
     build_habit_report_csv,
 )
 from app.habit_schedule import WEEKDAY_LABELS, format_schedule, mask_to_weekdays
+from app.habit_selected_completion import (
+    SelectedCompletionUpdateStatus,
+    set_selected_completions_on,
+)
 from app.schemas.habit import HabitCreate
 
 BASE_DIR = Path(__file__).resolve().parent
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 MONTH_PATTERN = re.compile(r"\d{4}-\d{2}\Z")
+HABIT_ID_PATTERN = re.compile(r"[1-9]\d*\Z")
 
 router = APIRouter(prefix="/habits", tags=["habit-reports"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -43,6 +48,18 @@ def parse_date(value: str) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def parse_habit_ids(values: list[str] | None) -> list[int] | None:
+    if not values:
+        return []
+    if any(not HABIT_ID_PATTERN.fullmatch(value) for value in values):
+        return None
+
+    habit_ids = [int(value) for value in values]
+    if len(set(habit_ids)) != len(habit_ids):
+        return None
+    return habit_ids
 
 
 def parse_month(value: str) -> date | None:
@@ -413,6 +430,105 @@ def update_habit_completions_bulk(
             db,
             today,
             "未来の日付の達成状態は一括変更できません。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return RedirectResponse(
+        url=f"/habits/history?target_date={parsed_date.isoformat()}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/completions/selected")
+def update_selected_habit_completions(
+    request: Request,
+    target_date: str = Form(...),
+    completed: str = Form(...),
+    habit_ids: list[str] | None = Form(None),
+    db: Session = Depends(get_db),
+) -> Response:
+    today = date.today()
+    parsed_date = parse_date(target_date)
+    if parsed_date is None:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "日付はYYYY-MM-DD形式で指定してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if parsed_date > today:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "未来の日付の達成状態は選択変更できません。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if completed not in {"true", "false"}:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "選択操作の達成状態が不正です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    parsed_habit_ids = parse_habit_ids(habit_ids)
+    if parsed_habit_ids is None:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "選択された習慣IDが不正です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    result = set_selected_completions_on(
+        db,
+        parsed_habit_ids,
+        parsed_date,
+        completed=completed == "true",
+        latest_editable_date=today,
+    )
+    if result.status == SelectedCompletionUpdateStatus.EMPTY_SELECTION:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "操作する習慣を1件以上選択してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if result.status == SelectedCompletionUpdateStatus.INVALID_SELECTION:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "選択された習慣IDが不正です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if result.status == SelectedCompletionUpdateStatus.NOT_FOUND:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "選択された習慣の一部が存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if result.status == SelectedCompletionUpdateStatus.NOT_EXPECTED:
+        return render_daily_report(
+            request,
+            db,
+            parsed_date,
+            "選択された習慣の一部は、この日の有効期間または対象曜日の範囲外です。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if result.status == SelectedCompletionUpdateStatus.FUTURE_DATE:
+        return render_daily_report(
+            request,
+            db,
+            today,
+            "未来の日付の達成状態は選択変更できません。",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
