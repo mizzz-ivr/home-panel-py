@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.crud import habit as habit_crud
 from app.habit_completion import get_expected_habit_ids, list_completions_on
+from app.habit_completion_undo import (
+    get_completion_habit_ids,
+    record_completion_undo_best_effort,
+)
 from app.models.habit import HabitCompletion
 
 
@@ -61,6 +65,7 @@ def set_selected_completions_on(
             invalid_habit_ids=unknown_ids,
         )
 
+    before_ids = get_completion_habit_ids(db, target_date)
     completions_by_habit_id = {
         completion.habit_id: completion
         for completion in list_completions_on(db, target_date)
@@ -93,6 +98,7 @@ def set_selected_completions_on(
             existing_ids = {
                 completion.habit_id for completion in list_completions_on(db, target_date)
             }
+            before_ids = tuple(sorted(existing_ids))
             missing_ids = selected_ids - existing_ids
             if not missing_ids:
                 return SelectedCompletionUpdate(
@@ -103,6 +109,13 @@ def set_selected_completions_on(
                 db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
             db.commit()
 
+        record_completion_undo_best_effort(
+            db,
+            target_date,
+            before_ids,
+            get_completion_habit_ids(db, target_date),
+            source="selected_complete",
+        )
         return SelectedCompletionUpdate(
             SelectedCompletionUpdateStatus.UPDATED,
             selected_count=len(selected_ids),
@@ -123,6 +136,13 @@ def set_selected_completions_on(
     for completion in existing:
         db.delete(completion)
     db.commit()
+    record_completion_undo_best_effort(
+        db,
+        target_date,
+        before_ids,
+        get_completion_habit_ids(db, target_date),
+        source="selected_clear",
+    )
     return SelectedCompletionUpdate(
         SelectedCompletionUpdateStatus.UPDATED,
         selected_count=len(selected_ids),
