@@ -1,0 +1,43 @@
+.habit-undo-container[hidden] {
+  display: none;
+}
+
+.habit-undo-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.habit-undo-notice strong {
+  color: #1e3a8a;
+}
+
+.habit-undo-notice p {
+  margin: 4px 0 0;
+}
+
+.habit-undo-notice form {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.habit-undo-notice button {
+  width: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .habit-undo-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .habit-undo-notice button,
+  .habit-undo-notice form {
+    width: 100%;
+  }
+}
