@@ -328,6 +328,8 @@ def undo_completion_change(
     )
     for completion in completions:
         db.delete(completion)
+    # SQLAlchemyが同一flush内でINSERTをDELETEより先に実行しないよう、削除を先に確定する。
+    db.flush()
     for habit_id in action.before_habit_ids:
         db.add(
             HabitCompletion(
