@@ -237,16 +237,24 @@ def record_completion_undo_best_effort(
     *,
     source: str,
 ) -> HabitCompletionUndoAction | None:
+    before = tuple(before_habit_ids)
+    after = tuple(after_habit_ids)
+    if before == after:
+        return None
+
+    bind = db.get_bind()
+    # 達成記録コミット後の読み取りトランザクションを閉じ、SQLiteの書き込み競合を避ける。
+    db.rollback()
     try:
-        return record_completion_undo(
-            db,
-            target_date,
-            before_habit_ids,
-            after_habit_ids,
-            source=source,
-        )
+        with Session(bind=bind) as undo_db:
+            return record_completion_undo(
+                undo_db,
+                target_date,
+                before,
+                after,
+                source=source,
+            )
     except SQLAlchemyError:
-        db.rollback()
         return None
 
 
