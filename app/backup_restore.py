@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event, inspect, text
+from sqlalchemy.engine import URL
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -26,7 +27,7 @@ from app.backup_validate import (
 )
 from app.db import Base
 from app.habit_schedule import weekdays_to_mask
-from app.models.app_setting import AppSetting
+from app.models.app_setting import AppSetting  # noqa: F401
 from app.models.habit import (
     Habit,
     HabitActivePeriod,
@@ -95,13 +96,19 @@ def normalize_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
         for source_habit in source_data["habits"]:
             habit = copy.deepcopy(source_habit)
             if schema_version == 2:
-                habit["archived_at"] = None if habit["is_active"] else habit["updated_at"]
+                habit["archived_at"] = (
+                    None if habit["is_active"] else habit["updated_at"]
+                )
             data["habits"].append(habit)
-        data["habit_completions"] = copy.deepcopy(source_data["habit_completions"])
+        data["habit_completions"] = copy.deepcopy(
+            source_data["habit_completions"]
+        )
 
     ordered_habits = sorted(data["habits"], key=lambda item: item["id"])
     if schema_version >= 4:
-        data["habit_active_periods"] = copy.deepcopy(source_data["habit_active_periods"])
+        data["habit_active_periods"] = copy.deepcopy(
+            source_data["habit_active_periods"]
+        )
     else:
         for index, habit in enumerate(ordered_habits, start=1):
             created_at = parse_utc_datetime(habit["created_at"])
@@ -111,13 +118,19 @@ def normalize_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
                     "id": index,
                     "habit_id": habit["id"],
                     "started_on": created_at.date().isoformat(),
-                    "ended_on": archived_at.date().isoformat() if archived_at is not None else None,
+                    "ended_on": (
+                        archived_at.date().isoformat()
+                        if archived_at is not None
+                        else None
+                    ),
                     "created_at": habit["created_at"],
                 }
             )
 
     if schema_version >= 5:
-        data["habit_schedule_periods"] = copy.deepcopy(source_data["habit_schedule_periods"])
+        data["habit_schedule_periods"] = copy.deepcopy(
+            source_data["habit_schedule_periods"]
+        )
     else:
         for index, habit in enumerate(ordered_habits, start=1):
             created_at = parse_utc_datetime(habit["created_at"])
@@ -134,7 +147,9 @@ def normalize_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
             )
 
     data["tasks"].sort(key=lambda item: item["id"])
-    data["daily_memos"].sort(key=lambda item: (item["memo_date"], item["id"]))
+    data["daily_memos"].sort(
+        key=lambda item: (item["memo_date"], item["id"])
+    )
     data["time_entries"].sort(
         key=lambda item: (item["entry_date"], item["created_at"], item["id"])
     )
@@ -172,7 +187,9 @@ def prepare_backup_for_restore(
     *,
     expected_sha256: str | None = None,
 ) -> tuple[dict[str, Any], str, int]:
-    if expected_sha256 is not None and not SHA256_PATTERN.fullmatch(expected_sha256):
+    if expected_sha256 is not None and not SHA256_PATTERN.fullmatch(
+        expected_sha256
+    ):
         raise BackupRestoreInputError(
             "--expected-sha256は64桁の16進数で指定してください。"
         )
@@ -196,8 +213,9 @@ def prepare_backup_for_restore(
 
 
 def create_sqlite_engine(database_path: Path) -> Engine:
+    database_url = URL.create("sqlite", database=str(database_path))
     engine = create_engine(
-        f"sqlite:///{database_path.as_posix()}",
+        database_url,
         connect_args={"check_same_thread": False},
     )
 
@@ -246,7 +264,9 @@ def inspect_restore_destination(database_path: Path) -> bool:
                     f"復元先DBの整合性確認に失敗しました: {integrity}"
                 )
             for table_name in sorted(user_tables):
-                count = connection.scalar(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+                count = connection.scalar(
+                    text(f'SELECT COUNT(*) FROM "{table_name}"')
+                )
                 if count:
                     non_empty_tables.append(f"{table_name}={count}")
         if non_empty_tables:
@@ -404,9 +424,14 @@ def insert_normalized_payload(db: Session, payload: dict[str, Any]) -> None:
     )
 
 
-def verify_temporary_database(engine: Engine, expected_payload: dict[str, Any]) -> None:
+def verify_temporary_database(
+    engine: Engine,
+    expected_payload: dict[str, Any],
+) -> None:
     with engine.connect() as connection:
-        foreign_key_errors = connection.execute(text("PRAGMA foreign_key_check")).all()
+        foreign_key_errors = connection.execute(
+            text("PRAGMA foreign_key_check")
+        ).all()
         if foreign_key_errors:
             raise RuntimeError(
                 "復元後DBの外部キー整合性確認に失敗しました: "
@@ -414,9 +439,15 @@ def verify_temporary_database(engine: Engine, expected_payload: dict[str, Any]) 
             )
         integrity = connection.scalar(text("PRAGMA integrity_check"))
         if integrity != "ok":
-            raise RuntimeError(f"復元後DBの整合性確認に失敗しました: {integrity}")
+            raise RuntimeError(
+                f"復元後DBの整合性確認に失敗しました: {integrity}"
+            )
 
-    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
     exported_at = parse_utc_datetime(expected_payload["exported_at"]).replace(
         tzinfo=timezone.utc
     )
@@ -434,11 +465,18 @@ def verify_temporary_database(engine: Engine, expected_payload: dict[str, Any]) 
         raise RuntimeError("復元後のデータがバックアップと一致しません。")
 
 
-def build_temporary_database(temporary_path: Path, payload: dict[str, Any]) -> None:
+def build_temporary_database(
+    temporary_path: Path,
+    payload: dict[str, Any],
+) -> None:
     engine = create_sqlite_engine(temporary_path)
     try:
         Base.metadata.create_all(bind=engine)
-        session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        session_factory = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=engine,
+        )
         with session_factory() as db:
             with db.begin():
                 insert_normalized_payload(db, payload)
@@ -500,13 +538,15 @@ def restore_backup_file(
         build_temporary_database(temporary_path, normalized)
         fsync_file(temporary_path)
         if destination_existed:
-            safety_copy_path = create_safety_copy(destination, created_at=restored_at)
+            safety_copy_path = create_safety_copy(
+                destination,
+                created_at=restored_at,
+            )
         os.replace(temporary_path, destination)
         try:
             destination.chmod(0o600)
         except OSError:
             pass
-        fsync_file(destination)
         fsync_directory(destination.parent)
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -539,7 +579,11 @@ def create_parser() -> argparse.ArgumentParser:
             "未作成または空のSQLite DBへ安全に復元します。"
         )
     )
-    parser.add_argument("backup", type=Path, help="復元するJSONバックアップファイル")
+    parser.add_argument(
+        "backup",
+        type=Path,
+        help="復元するJSONバックアップファイル",
+    )
     parser.add_argument(
         "--database",
         type=Path,
