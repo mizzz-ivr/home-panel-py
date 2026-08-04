@@ -1,7 +1,7 @@
 # home-panel-py
 
 ローカルPCで動作する個人用ダッシュボードです。  
-ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週次・月次の振り返り、CSV出力、JSONバックアップを行えます。
+ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週次・月次の振り返り、CSV出力、JSONバックアップ・検証・復元を行えます。
 
 ## プロジェクト概要
 
@@ -73,18 +73,22 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 
 詳細は[`DASHBOARD.md`](./DASHBOARD.md)を参照してください。
 
-### エクスポート・バックアップ
+### エクスポート・バックアップ・復元
 
 - 月単位の時間記録CSV
 - 習慣の週次・月次レポートCSV
 - ToDo・メモ・時間記録・習慣・有効期間・曜日設定期間のJSONバックアップCLI
 - バックアップ構造・件数・参照整合性・SHA-256検証CLI
-- バックアップスキーマv1〜v5の検証互換
+- 検証済みバックアップを未作成または空のSQLiteへ復元するCLI
+- バックアップスキーマv1〜v5の検証・復元互換
+- 一時DBの外部キー・SQLite整合性・再エクスポート一致確認
+- 既存空DBの復元前退避
 
 詳細:
 
 - [`HABIT_REPORT_CSV.md`](./HABIT_REPORT_CSV.md)
 - [`BACKUP.md`](./BACKUP.md)
+- [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md)
 
 ## 使用技術
 
@@ -195,7 +199,7 @@ DB内部では月曜0〜日曜6を7ビットのマスクで保存します。バ
 
 ## 既存SQLiteの自動移行
 
-旧DBでは、起動時に軽量マイグレーションを順番に実行します。
+旧DBでは、`Base.metadata.create_all()`を実行するWeb起動時などに軽量マイグレーションを順番に実行します。`app.db`のimportだけではDBファイルを作成・移行しません。
 
 1. `habits.archived_at`がなければ追加
 2. 終了済み習慣は`updated_at`から終了日時を補完
@@ -451,6 +455,39 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 - 達成記録が有効期間・曜日設定期間・対象曜日内にあること
 - SHA-256
 
+## JSONバックアップ復元
+
+復元前にHome Panelを停止してください。
+
+```bash
+python -m app.backup_restore /path/to/home-panel-backup.json
+```
+
+復元先とSHA-256を指定する場合:
+
+```bash
+python -m app.backup_restore /path/to/home-panel-backup.json \
+  --database /path/to/restored.db \
+  --expected-sha256 <64桁のSHA-256>
+```
+
+復元CLIはv1〜v5を受け付け、現在のv5テーブル構成へ正規化します。
+
+- 未作成または全テーブル0件のSQLiteだけを受け付ける
+- 既存データ・未知テーブル・破損DB・シンボリックリンクを拒否
+- 非空DBを削除する`--force`は提供しない
+- 復元先へ直接INSERTせず、同じディレクトリの一時DBを利用
+- 全件投入後に外部キー・SQLite整合性を確認
+- 再エクスポートした件数と全データの一致を確認
+- 完全検証後に`os.replace`で切り替える
+- 既存の空DBは置換前に退避する
+- `app_settings`、ダッシュボード設定、Pending Undoは復元対象外
+
+詳細:
+
+- [`BACKUP.md`](./BACKUP.md)
+- [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md)
+
 ## ダッシュボード設定API
 
 - `GET /api/dashboard/preferences`
@@ -481,6 +518,7 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 - 達成選択一括操作: 1件以上の正の整数ID、重複なし、既知ID、達成追加時は全件対象内
 - Undo状態取得: 厳密な日付形式
 - Undo復元: 16〜128文字のトークン、保存トークン一致、期限・状態・参照整合性
+- バックアップ復元: 検証済みv1〜v5、任意のSHA-256照合、空DB、既知テーブル、通常ファイル
 - 履歴・集計・CSV: 日付・月形式を厳密検証し未来期間を拒否
 - ダッシュボード設定: 未登録カード、重複、欠落、全非表示を拒否
 
@@ -504,6 +542,7 @@ home-panel-py/
 │  ├─ csv_export.py
 │  ├─ backup_export.py
 │  ├─ backup_validate.py
+│  ├─ backup_restore.py
 │  ├─ models/
 │  ├─ schemas/
 │  ├─ crud/
@@ -519,6 +558,7 @@ home-panel-py/
 │     └─ habit_undo.css
 ├─ tests/
 ├─ BACKUP.md
+├─ BACKUP_RESTORE.md
 ├─ DASHBOARD.md
 ├─ HABITS.md
 ├─ HABIT_SCHEDULES.md
@@ -566,10 +606,16 @@ pytest -q
 - 対象外曜日の達成拒否と分母除外
 - 過去設定を保持した日別・週次・月次集計
 - 旧SQLiteからの有効期間・毎日設定生成と冪等性
+- DBモジュールimport時に既定DBを作成・移行しないこと
+- `create_all()`実行時に旧DB移行を維持すること
 - 時間記録CSVエクスポート
 - 習慣の週次・月次CSVエクスポート
 - JSONバックアップv5生成
 - v1〜v5検証
+- v1〜v5から現在スキーマへの復元
+- 復元前の既存データ・未知テーブル・破損DB・SHA不一致拒否
+- 一時DBの外部キー・整合性・再エクスポート一致
+- 復元失敗時の既存DB保持と一時ファイル削除
 - 有効期間・曜日設定期間・達成記録の不整合検出
 - ダッシュボード設定
 - Swapy用HTML構造とJavaScript配信
@@ -605,7 +651,8 @@ Swapy 1.0.5はGPL-3.0または商用ライセンスで提供されています�
 - 複数段階Undo・Redo
 - キーボード操作によるカード並び替え
 - ダッシュボードの表示密度・テーマ設定
-- JSONバックアップからの安全な復元
+- 非空DBへの明示的な置換・マージ復元
+- バックアップ暗号化・署名検証
 - 週次・月次集計のカテゴリ積み上げ表示
 - 操作履歴・監査ログ
 - 認証・ユーザー分離
