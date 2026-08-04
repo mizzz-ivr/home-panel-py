@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from pathlib import import Path
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event, inspect, text
