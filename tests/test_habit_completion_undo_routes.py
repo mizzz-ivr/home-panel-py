@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,7 @@ from app.models.habit import HabitCompletion
 
 FIXED_TODAY = date(2026, 7, 31)
 PAST_DATE = date(2026, 7, 30)
+FIXED_CREATED_AT = datetime(2026, 7, 1)
 
 
 class FixedDate(date):
@@ -59,12 +60,16 @@ def create_habit(
 ) -> int:
     session_factory = client.app.state.testing_session_factory
     with session_factory() as db:
-        return habit_crud.create_habit(
+        habit = habit_crud.create_habit(
             db,
             name,
             started_on=date(2026, 7, 1),
             weekdays=weekdays,
-        ).id
+        )
+        habit.created_at = FIXED_CREATED_AT
+        habit.updated_at = FIXED_CREATED_AT
+        db.commit()
+        return habit.id
 
 
 def add_completion(client: TestClient, habit_id: int, target_date: date) -> None:
