@@ -7,6 +7,11 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.habit_completion_undo import (
+    clear_completion_undo,
+    get_completion_habit_ids,
+    record_completion_undo_best_effort,
+)
 from app.habit_schedule import (
     ALL_WEEKDAYS_MASK,
     calculate_scheduled_streak,
@@ -265,6 +270,7 @@ def update_habit_schedule(
 
     db.commit()
     db.refresh(habit)
+    clear_completion_undo(db)
     return habit
 
 
@@ -293,6 +299,8 @@ def toggle_today_completion(
     )
     if completion is None and not is_habit_expected_on(db, habit_id, target_date):
         return False
+
+    before_ids = get_completion_habit_ids(db, target_date)
     if completion is None:
         db.add(HabitCompletion(habit_id=habit_id, completed_on=target_date))
         completed = True
@@ -301,6 +309,13 @@ def toggle_today_completion(
         completed = False
 
     db.commit()
+    record_completion_undo_best_effort(
+        db,
+        target_date,
+        before_ids,
+        get_completion_habit_ids(db, target_date),
+        source="dashboard_toggle",
+    )
     return completed
 
 
@@ -343,6 +358,7 @@ def archive_habit(
     habit.is_active = False
     habit.archived_at = changed_at
     db.commit()
+    clear_completion_undo(db)
     return True
 
 
@@ -370,6 +386,7 @@ def restore_habit(
     habit.is_active = True
     habit.archived_at = None
     db.commit()
+    clear_completion_undo(db)
     return True
 
 

@@ -39,6 +39,7 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 - 日別履歴から今日を含む過去日の達成状態を修正
 - 日別履歴で対象習慣を一括達成・その日の全達成記録を一括取り消し
 - 日別履歴で選択した習慣だけを一括達成・一括取り消し
+- 直前の達成操作を10分以内に元へ戻すUndo
 - 毎日・平日・土日・任意曜日の設定
 - 対象外曜日を除外した今日の達成件数
 - 対象日ベースの連続達成表示
@@ -58,6 +59,7 @@ ToDo・メモ・作業時間・継続習慣を1画面で管理し、日別・週
 - [`HABIT_SCHEDULES.md`](./HABIT_SCHEDULES.md)
 - [`HABIT_REPORTS.md`](./HABIT_REPORTS.md)
 - [`HABIT_BULK_COMPLETION.md`](./HABIT_BULK_COMPLETION.md)
+- [`HABIT_COMPLETION_UNDO.md`](./HABIT_COMPLETION_UNDO.md)
 - [`HABIT_REPORT_CSV.md`](./HABIT_REPORT_CSV.md)
 
 ### ダッシュボード設定
@@ -131,6 +133,7 @@ uvicorn app.main:app --reload
 - 時間記録CSV: <http://127.0.0.1:8000/exports/time-entries.csv>
 - 習慣週次CSV: <http://127.0.0.1:8000/habits/weekly.csv>
 - 習慣月次CSV: <http://127.0.0.1:8000/habits/monthly.csv>
+- 習慣Undo状態API: <http://127.0.0.1:8000/habits/completions/undo?target_date=2026-07-31>
 
 初回起動時に`home_panel.db`が作成されます。
 
@@ -144,6 +147,8 @@ uvicorn app.main:app --reload
 - `habit_schedule_periods`
 - `habit_completions`
 - `app_settings`
+
+`app_settings`にはダッシュボード設定のほか、期限付きの直前習慣操作Undoを保存します。
 
 ## 習慣のライフサイクル
 
@@ -234,6 +239,7 @@ DB変更が増えた場合は、Alembicなどの本格的なマイグレーシ�
 - 対象日の対象習慣を一括達成
 - 指定日の全達成記録を一括取り消し
 - 選択した習慣だけを一括達成・一括取り消し
+- 直前の達成操作を元に戻すUndo
 - 達成数・対象件数・達成率
 - 全対象習慣を達成した日数
 - 日別カレンダー
@@ -302,7 +308,7 @@ action=complete_expected|clear_all
 
 - `complete_expected`: 指定日に達成対象だった未達成習慣だけを一括追加
 - `clear_all`: 指定日の全達成記録を不整合記録も含めて一括削除
-- 1操作につき1回のコミット
+- 達成記録本体は1操作につき1回のコミット
 - 同じ操作を再送しても最終状態が変わらない
 - 一括取り消しは送信前に確認ダイアログを表示
 
@@ -328,13 +334,44 @@ habit_ids=<習慣ID>（複数指定）
 - 選択なし・重複・不正IDを拒否
 - 未知IDを含む場合は404
 - 1件でも不正な選択があれば部分更新しない
-- 追加・削除とも1回のコミット
+- 達成記録本体の追加・削除は1回のコミット
 - JavaScriptなしでも利用可能
 
 詳細:
 
 - [`HABIT_REPORTS.md`](./HABIT_REPORTS.md)
 - [`HABIT_BULK_COMPLETION.md`](./HABIT_BULK_COMPLETION.md)
+
+## 習慣達成Undo
+
+ダッシュボードと習慣日別履歴の達成操作後に、直前1操作を10分以内で元へ戻せます。
+
+```text
+GET  /habits/completions/undo?target_date=YYYY-MM-DD
+POST /habits/completions/undo
+```
+
+対象:
+
+- ダッシュボードの当日トグル
+- 単件達成・取り消し
+- 全件一括達成・取り消し
+- 選択一括達成・取り消し
+
+安全条件:
+
+- ランダムトークンが一致する
+- 有効期限内
+- 現在の対象日達成集合が操作直後集合と完全一致する
+- 操作前集合の習慣が存在する
+
+後続変更がある場合は409で拒否し、最新状態を上書きしません。曜日設定変更・習慣終了・再開では保存中のUndoを失効させます。
+
+達成記録本体は従来の1コミットで確定し、Undoメタデータは短命な別Sessionへbest-effort保存します。Undo保存に失敗しても達成操作は維持します。復元時は、達成記録の置換とUndo消費を同じコミットで行います。
+
+Undo通知の表示にはJavaScriptを使用しますが、復元条件はサーバー側で再検証します。
+
+詳細は[`HABIT_COMPLETION_UNDO.md`](./HABIT_COMPLETION_UNDO.md)を参照してください。
 
 ## 時間記録CSV
 
@@ -386,6 +423,8 @@ python -m app.backup_export
 - v5: v4 + `habit_schedule_periods`
 
 旧DBを直接指定した場合、バックアップ前に習慣関連テーブルの互換移行を実行します。
+
+`app_settings`内のPending Undoは一時的な操作補助情報のため、バックアップv5へ含めません。
 
 ## バックアップ検証
 
@@ -440,6 +479,8 @@ python -m app.backup_validate /path/to/home-panel-backup.json
 - 達成状態: `true` / `false`だけ許可
 - 達成全件一括操作: `complete_expected` / `clear_all`だけ許可
 - 達成選択一括操作: 1件以上の正の整数ID、重複なし、既知ID、達成追加時は全件対象内
+- Undo状態取得: 厳密な日付形式
+- Undo復元: 16〜128文字のトークン、保存トークン一致、期限・状態・参照整合性
 - 履歴・集計・CSV: 日付・月形式を厳密検証し未来期間を拒否
 - ダッシュボード設定: 未登録カード、重複、欠落、全非表示を拒否
 
@@ -455,6 +496,8 @@ home-panel-py/
 │  ├─ habit_schedule.py
 │  ├─ habit_completion.py
 │  ├─ habit_selected_completion.py
+│  ├─ habit_completion_undo.py
+│  ├─ habit_undo_routes.py
 │  ├─ habit_report.py
 │  ├─ habit_report_routes.py
 │  ├─ habit_report_csv.py
@@ -472,6 +515,8 @@ home-panel-py/
 │  │  ├─ habit_weekly.html
 │  │  └─ habit_monthly.html
 │  └─ static/
+│     ├─ habit_undo.js
+│     └─ habit_undo.css
 ├─ tests/
 ├─ BACKUP.md
 ├─ DASHBOARD.md
@@ -479,6 +524,7 @@ home-panel-py/
 ├─ HABIT_SCHEDULES.md
 ├─ HABIT_REPORTS.md
 ├─ HABIT_BULK_COMPLETION.md
+├─ HABIT_COMPLETION_UNDO.md
 ├─ HABIT_REPORT_CSV.md
 ├─ requirements.txt
 └─ README.md
@@ -502,6 +548,12 @@ pytest -q
 - 全件・選択一括操作の対象曜日・停止期間・終了済み期間判定
 - 全件・選択一括操作による不整合記録の修復
 - 一括操作の再送・コミット回数・表示条件
+- 直前操作のUndo保存・置き換え・復元・消費
+- Undoの期限切れ・トークン不一致・後続変更・習慣欠落
+- Undoによる不整合記録の操作前状態復元
+- 曜日変更・終了・再開によるUndo失効
+- Undo状態API・安全な戻り先・no-store・nosniff
+- Undo通知用JavaScript・CSS・画面プレースホルダー
 - 期間テーブルがない旧形式習慣の単件・一括達成互換
 - 終了済み習慣の有効期間内編集
 - 終了後・停止期間・対象曜日外の達成追加拒否
@@ -550,6 +602,7 @@ Swapy 1.0.5はGPL-3.0または商用ライセンスで提供されています�
 - 複数日一括編集・月次カレンダーからの直接編集
 - 有効期間・曜日設定期間の手動編集
 - 日別履歴CSV・年次集計
+- 複数段階Undo・Redo
 - キーボード操作によるカード並び替え
 - ダッシュボードの表示密度・テーマ設定
 - JSONバックアップからの安全な復元

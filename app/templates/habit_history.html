@@ -6,6 +6,7 @@
     <title>習慣の日別履歴 | Home Panel</title>
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/habit_reports.css" />
+    <link rel="stylesheet" href="/static/habit_undo.css" />
   </head>
   <body>
     <main class="container">
@@ -24,6 +25,14 @@
       {% if error_message %}
       <section class="card error" role="alert">{{ error_message }}</section>
       {% endif %}
+
+      <div
+        class="habit-undo-container"
+        data-habit-undo
+        data-target-date="{{ selected_date.isoformat() }}"
+        aria-live="polite"
+        hidden
+      ></div>
 
       <section class="card history-controls" aria-labelledby="habit-history-date-heading">
         <div class="card-heading">
@@ -201,5 +210,6 @@
       </section>
     </main>
     <script src="/static/app.js" defer></script>
+    <script src="/static/habit_undo.js" defer></script>
   </body>
 </html>

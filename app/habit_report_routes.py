@@ -30,6 +30,7 @@ from app.habit_selected_completion import (
     SelectedCompletionUpdateStatus,
     set_selected_completions_on,
 )
+from app.habit_undo_routes import router as habit_undo_router
 from app.schemas.habit import HabitCreate
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -38,6 +39,7 @@ MONTH_PATTERN = re.compile(r"\d{4}-\d{2}\Z")
 HABIT_ID_PATTERN = re.compile(r"[1-9]\d*\Z")
 
 router = APIRouter(prefix="/habits", tags=["habit-reports"])
+router.include_router(habit_undo_router)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
