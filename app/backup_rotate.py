@@ -131,19 +131,26 @@ def backup_directory_lock(
         ) from exc
 
     lock_stat = os.fstat(descriptor)
+    try:
+        lock_file = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+    except Exception:
+        os.close(descriptor)
+        remove_owned_lock(lock_path, lock_stat.st_dev, lock_stat.st_ino)
+        raise
+
     timestamp = (acquired_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as lock_file:
-            lock_file.write(f"pid={os.getpid()}\n")
-            lock_file.write(
-                "acquired_at="
-                + timestamp.isoformat().replace("+00:00", "Z")
-                + "\n"
-            )
-            lock_file.flush()
-            os.fsync(lock_file.fileno())
+        lock_file.write(f"pid={os.getpid()}\n")
+        lock_file.write(
+            "acquired_at="
+            + timestamp.isoformat().replace("+00:00", "Z")
+            + "\n"
+        )
+        lock_file.flush()
+        os.fsync(lock_file.fileno())
         yield lock_path
     finally:
+        lock_file.close()
         remove_owned_lock(lock_path, lock_stat.st_dev, lock_stat.st_ino)
 
 
