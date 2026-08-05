@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>横断検索 | Home Panel</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/search.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header card">
+        <div>
+          <h1>横断検索</h1>
+          <p>ToDo・メモ・時間記録・習慣をまとめて検索します。</p>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="button-link secondary-button">今日のダッシュボード</a>
+          <a href="/history" class="button-link secondary-button">履歴を見る</a>
+        </div>
+      </header>
+
+      <section class="card search-panel" aria-labelledby="search-heading">
+        <h2 id="search-heading">検索</h2>
+        <form action="/search" method="get" class="global-search-form" role="search">
+          <label class="sr-only" for="global-search-query">検索語</label>
+          <input
+            id="global-search-query"
+            type="search"
+            name="q"
+            value="{{ query }}"
+            minlength="2"
+            maxlength="100"
+            placeholder="2〜100文字で検索"
+            autocomplete="off"
+            required
+          />
+          <button type="submit">検索</button>
+        </form>
+        <p class="hint">
+          保存データは変更しません。検索結果はカテゴリごとに最大{{ result_limit_per_category }}件です。
+        </p>
+      </section>
+
+      {% if error_message %}
+      <section class="card error" role="alert">{{ error_message }}</section>
+      {% endif %}
+
+      {% if not searched and not error_message %}
+      <section class="card search-empty-state">
+        <h2>探したい言葉を入力してください</h2>
+        <p>ToDoタイトル、日別メモ、時間記録のカテゴリ・メモ、習慣名が対象です。</p>
+      </section>
+      {% endif %}
+
+      {% if searched %}
+      <section class="card search-summary" aria-live="polite">
+        <p><strong>「{{ query }}」</strong>の検索結果</p>
+        <strong class="search-total">{{ results.total_count }}件</strong>
+      </section>
+
+      {% macro result_section(section_id, title, items, empty_message) -%}
+      <section class="card search-results-section" aria-labelledby="{{ section_id }}">
+        <div class="search-section-heading">
+          <h2 id="{{ section_id }}">{{ title }}</h2>
+          <span>{{ items|length }}件</span>
+        </div>
+        {% if items %}
+        <ul class="search-result-list">
+          {% for item in items %}
+          <li class="search-result-item">
+            <div class="search-result-content">
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.description }}</p>
+              <small>{{ item.metadata }}</small>
+            </div>
+            <a href="{{ item.url }}" class="button-link secondary-button">開く</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="search-no-results">{{ empty_message }}</p>
+        {% endif %}
+      </section>
+      {%- endmacro %}
+
+      {{ result_section('search-tasks', 'ToDo', results.tasks, '一致するToDoはありません。') }}
+      {{ result_section('search-memos', '日別メモ', results.memos, '一致するメモはありません。') }}
+      {{ result_section('search-time-entries', '時間記録', results.time_entries, '一致する時間記録はありません。') }}
+      {{ result_section('search-habits', '習慣', results.habits, '一致する習慣はありません。') }}
+      {% endif %}
+    </main>
+  </body>
+</html>
