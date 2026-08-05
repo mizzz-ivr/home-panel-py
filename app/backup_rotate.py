@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import Engine, URL
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
@@ -104,6 +104,15 @@ def prepare_backup_directory(directory: Path) -> Path:
     return resolved
 
 
+def remove_owned_lock(lock_path: Path, device: int, inode: int) -> None:
+    try:
+        current = os.stat(lock_path, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if current.st_dev == device and current.st_ino == inode:
+        lock_path.unlink(missing_ok=True)
+
+
 @contextmanager
 def backup_directory_lock(
     directory: Path,
@@ -121,6 +130,7 @@ def backup_directory_lock(
             "実行中の処理がないことを確認してからロックファイルを削除してください。"
         ) from exc
 
+    lock_stat = os.fstat(descriptor)
     timestamp = (acquired_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as lock_file:
@@ -134,32 +144,36 @@ def backup_directory_lock(
             os.fsync(lock_file.fileno())
         yield lock_path
     finally:
-        lock_path.unlink(missing_ok=True)
+        remove_owned_lock(lock_path, lock_stat.st_dev, lock_stat.st_ino)
+
+
+def path_is_occupied(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
 
 
 def next_backup_path(directory: Path, exported_at: datetime) -> Path:
     timestamp = exported_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     base_path = directory / f"home-panel-backup-{timestamp}.json"
-    if not base_path.exists():
+    if not path_is_occupied(base_path):
         return base_path
 
     for sequence in range(2, 10000):
         candidate = directory / f"home-panel-backup-{timestamp}-{sequence}.json"
-        if not candidate.exists():
+        if not path_is_occupied(candidate):
             return candidate
     raise BackupRotationRuntimeError(
         f"同一時刻のバックアップ名を採番できません: {timestamp}"
     )
 
 
-def create_sqlite_engine(database_path: Path):
+def create_sqlite_engine(database_path: Path) -> Engine:
     return create_engine(
         URL.create("sqlite", database=str(database_path)),
         connect_args={"check_same_thread": False},
     )
 
 
-def validate_database_for_backup(engine) -> None:
+def validate_database_for_backup(engine: Engine) -> None:
     table_names = set(inspect(engine).get_table_names())
     missing_base_tables = BASE_REQUIRED_TABLES - table_names
     if missing_base_tables:
@@ -189,7 +203,15 @@ def filename_metadata(path: Path) -> tuple[datetime, int] | None:
 
 
 def inspect_managed_backup(path: Path) -> tuple[ManagedBackup | None, SkippedBackup | None]:
-    metadata = filename_metadata(path)
+    if BACKUP_FILENAME_PATTERN.fullmatch(path.name) is None:
+        return None, None
+    try:
+        metadata = filename_metadata(path)
+    except ValueError:
+        return None, SkippedBackup(
+            path,
+            "ファイル名のUTC日時が実在しないため自動管理しません。",
+        )
     if metadata is None:
         return None, None
     if path.is_symlink():
@@ -286,7 +308,7 @@ def collect_managed_backups(
     managed: list[ManagedBackup] = []
     skipped: list[SkippedBackup] = []
     for path in directory.iterdir():
-        if filename_metadata(path) is None:
+        if BACKUP_FILENAME_PATTERN.fullmatch(path.name) is None:
             continue
         inspected, warning = inspect_managed_backup(path)
         if inspected is not None:
@@ -312,11 +334,24 @@ def prune_managed_backups(
 ) -> RetentionResult:
     validate_keep_count(keep_count)
     managed, skipped = collect_managed_backups(directory)
-    candidates = managed[:-keep_count] if len(managed) > keep_count else []
+    protected = protected_path.resolve()
+    if not any(item.path == protected for item in managed):
+        warning = next(
+            (item for item in skipped if item.path.resolve() == protected),
+            SkippedBackup(
+                protected,
+                "今回作成したバックアップを再検証できません。",
+            ),
+        )
+        return RetentionResult(
+            deleted=(),
+            skipped=tuple(sorted(skipped, key=lambda item: item.path.name)),
+            failed=(warning,),
+        )
 
+    candidates = managed[:-keep_count] if len(managed) > keep_count else []
     deleted: list[Path] = []
     failed: list[SkippedBackup] = []
-    protected = protected_path.resolve()
     for candidate in candidates:
         if candidate.path == protected:
             skipped.append(
