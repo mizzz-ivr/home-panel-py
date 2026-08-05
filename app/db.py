@@ -1,4 +1,7 @@
-from sqlalchemy import create_engine
+from typing import Any
+
+from sqlalchemy import MetaData, create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.migrations import migrate_habit_schema
@@ -9,10 +12,23 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},
 )
-migrate_habit_schema(engine)
 
+
+class HomePanelMetaData(MetaData):
+    """テーブル作成前に既存SQLiteの互換移行を実行する。"""
+
+    def create_all(
+        self,
+        bind: Engine,
+        tables: Any = None,
+        checkfirst: bool = True,
+    ) -> None:
+        migrate_habit_schema(bind)
+        super().create_all(bind=bind, tables=tables, checkfirst=checkfirst)
+
+
+Base = declarative_base(metadata=HomePanelMetaData())
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 
 def get_db():
