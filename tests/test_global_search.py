@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.crud import app_setting as app_setting_crud
+from app.dashboard_cards import DASHBOARD_PREFERENCES_KEY, DEFAULT_DASHBOARD_ORDER
 from app.db import Base, get_db
 from app.global_search import SEARCH_RESULT_LIMIT_PER_CATEGORY, search_all
 from app.main import app
@@ -71,7 +73,7 @@ def test_search_page_finds_all_supported_categories(client: TestClient):
     assert "検索機能の設計メモを整理する" in response.text
     assert "横断検索の設計を進める" in response.text
     assert "毎日設計" in response.text
-    assert 'href="/#todo-card"' in response.text
+    assert 'href="/?show_card=todo#task-' in response.text
     assert 'href="/history?target_date=2026-08-01"' in response.text
     assert 'href="/history?target_date=2026-08-02"' in response.text
     assert 'href="/habits/manage#habit-' in response.text
@@ -212,3 +214,35 @@ def test_dashboard_has_global_search_form_and_result_anchors(client: TestClient)
     assert 'id="todo-card"' in dashboard.text
     assert habit_management.status_code == 200
     assert f'id="habit-{habit_id}"' in habit_management.text
+
+
+def test_search_temporarily_shows_hidden_todo_without_changing_preferences(
+    client: TestClient,
+):
+    session_factory = client.app.state.testing_session_factory
+    with session_factory() as db:
+        task = Task(title="非表示カードの検索対象")
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        task_id = task.id
+        app_setting_crud.upsert_json_setting(
+            db,
+            DASHBOARD_PREFERENCES_KEY,
+            {"order": list(DEFAULT_DASHBOARD_ORDER), "hidden": ["todo"]},
+        )
+
+    search_response = client.get("/search", params={"q": "非表示カード"})
+    normal_dashboard = client.get("/")
+    forced_dashboard = client.get("/", params={"show_card": "todo"})
+
+    assert search_response.status_code == 200
+    assert f'href="/?show_card=todo#task-{task_id}"' in search_response.text
+    assert 'id="todo-card"' not in normal_dashboard.text
+    assert forced_dashboard.status_code == 200
+    assert "この画面だけ非表示設定のToDoカードを表示しています" in forced_dashboard.text
+    assert f'id="task-{task_id}"' in forced_dashboard.text
+
+    with session_factory() as db:
+        saved = app_setting_crud.get_json_setting(db, DASHBOARD_PREFERENCES_KEY)
+    assert saved == {"order": list(DEFAULT_DASHBOARD_ORDER), "hidden": ["todo"]}
