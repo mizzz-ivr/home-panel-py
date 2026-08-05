@@ -1,0 +1,129 @@
+.global-search-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.global-search-form input[type="search"] {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.header .global-search-form {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.search-panel h2,
+.search-panel .hint,
+.search-summary p,
+.search-summary strong,
+.search-empty-state h2,
+.search-empty-state p,
+.search-result-content h3,
+.search-result-content p,
+.search-result-content small,
+.search-no-results {
+  margin: 0;
+}
+
+.search-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.search-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-total {
+  white-space: nowrap;
+  font-size: 20px;
+}
+
+.search-empty-state {
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  padding-block: 32px;
+}
+
+.search-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.search-section-heading h2 {
+  margin: 0;
+}
+
+.search-section-heading span {
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.search-result-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.search-result-content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.search-result-content h3,
+.search-result-content p {
+  overflow-wrap: anywhere;
+}
+
+.search-result-content p {
+  color: #374151;
+}
+
+.search-result-content small,
+.search-no-results {
+  color: #6b7280;
+}
+
+@media (max-width: 640px) {
+  .header .global-search-form,
+  .global-search-form {
+    max-width: none;
+    flex-wrap: wrap;
+  }
+
+  .global-search-form input[type="search"],
+  .global-search-form button,
+  .search-result-item .button-link {
+    width: 100%;
+  }
+
+  .search-result-item,
+  .search-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
