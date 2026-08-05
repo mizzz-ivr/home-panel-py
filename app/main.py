@@ -29,6 +29,7 @@ from app.schemas.habit import HabitCreate
 from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
+from app.search_routes import router as search_router
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -38,6 +39,7 @@ WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
 app = FastAPI(title="Home Panel")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(habit_report_router)
+app.include_router(search_router)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
