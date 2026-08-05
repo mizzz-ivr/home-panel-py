@@ -15,6 +15,19 @@
   max-width: 420px;
 }
 
+.search-forced-card {
+  display: grid;
+  gap: 8px;
+}
+
+.search-forced-card > .hint {
+  margin: 0;
+}
+
+.search-forced-card .drag-handle {
+  display: none;
+}
+
 .search-panel h2,
 .search-panel .hint,
 .search-summary p,
