@@ -48,7 +48,7 @@
         </div>
         <ul class="habit-management-list">
           {% for habit in active_habits %}
-          <li class="habit-management-item">
+          <li id="habit-{{ habit.id }}" class="habit-management-item">
             <form action="/habits/{{ habit.id }}/rename" method="post" class="habit-rename-form">
               <label for="active-habit-{{ habit.id }}">習慣名</label>
               <div class="inline-form">
@@ -86,7 +86,7 @@
         </div>
         <ul class="habit-management-list">
           {% for habit in archived_habits %}
-          <li class="habit-management-item archived">
+          <li id="habit-{{ habit.id }}" class="habit-management-item archived">
             <form action="/habits/{{ habit.id }}/rename" method="post" class="habit-rename-form">
               <label for="archived-habit-{{ habit.id }}">習慣名</label>
               <div class="inline-form">
