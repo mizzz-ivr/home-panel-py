@@ -85,7 +85,7 @@ def search_tasks(
             title=task.title,
             description="完了済み" if task.is_done else "未完了",
             metadata=f"更新: {format_datetime(task.updated_at)}",
-            url="/#todo-card",
+            url=f"/?show_card=todo#task-{task.id}",
         )
         for task in tasks
     )
