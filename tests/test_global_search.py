@@ -83,7 +83,7 @@ def test_search_landing_page_does_not_require_query(client: TestClient):
 
     assert response.status_code == 200
     assert "探したい言葉を入力してください" in response.text
-    assert "検索結果" not in response.text
+    assert 'class="card search-summary"' not in response.text
 
 
 @pytest.mark.parametrize("query", ["", " ", "a", "あ"])
