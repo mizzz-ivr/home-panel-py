@@ -78,6 +78,17 @@
         各カードの「並び替え」ハンドルをドラッグすると配置を変更できます。配置はサーバーへ自動保存されます。
       </p>
 
+      {% if request.query_params.get('show_card') == 'todo' and 'todo' in dashboard_preferences.hidden %}
+      <div class="search-forced-card" aria-label="検索結果のToDo">
+        <p class="hint">検索結果を開くため、この画面だけ非表示設定のToDoカードを表示しています。</p>
+        {% for card in dashboard_all_cards %}
+          {% if card.card_id == 'todo' %}
+            {% include card.template %}
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <div
         class="dashboard-grid"
         data-swapy-container
