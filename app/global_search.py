@@ -10,6 +10,7 @@ from app.models.habit import Habit
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
+from app.task_priority import format_task_due_date, format_task_priority
 
 SEARCH_RESULT_LIMIT_PER_CATEGORY = 20
 SEARCH_SNIPPET_LENGTH = 120
@@ -83,8 +84,14 @@ def search_tasks(
         SearchResultItem(
             item_id=task.id,
             title=task.title,
-            description="完了済み" if task.is_done else "未完了",
-            metadata=f"更新: {format_datetime(task.updated_at)}",
+            description=(
+                f"{'完了済み' if task.is_done else '未完了'}・"
+                f"優先度 {format_task_priority(task.priority)}"
+            ),
+            metadata=(
+                f"{format_task_due_date(task.due_date)}・"
+                f"更新: {format_datetime(task.updated_at)}"
+            ),
             url=f"/?show_card=todo#task-{task.id}",
         )
         for task in tasks
