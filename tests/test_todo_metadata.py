@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
+
+from app.backup_restore import restore_backup_file
 
 from .todo_metadata_legacy_tests import *  # noqa: F401,F403
 
@@ -94,3 +97,45 @@ def test_completed_past_due_task_is_not_rendered_as_overdue(client: TestClient):
     assert "done" in class_names
     assert "overdue" not in class_names
     assert "due-today" not in class_names
+
+
+def test_backup_v6_restore_preserves_task_due_date_and_priority(
+    client: TestClient,
+    tmp_path: Path,
+):
+    client.post(
+        "/tasks/advanced",
+        data={
+            "title": "復元対象ToDo",
+            "due_date": "2026-08-31",
+            "priority": "high",
+        },
+        follow_redirects=False,
+    )
+    with client.app.state.testing_session_factory() as db:
+        payload = build_backup_payload(
+            db,
+            exported_at=datetime(2026, 8, 6, 1, 0, tzinfo=timezone.utc),
+        )
+
+    backup_path = tmp_path / "todo-v6.json"
+    backup_path.write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    restored_path = tmp_path / "restored.db"
+
+    result = restore_backup_file(backup_path, restored_path)
+
+    assert result.source_schema_version == 6
+    restored_engine = create_engine(f"sqlite:///{restored_path.as_posix()}")
+    restored_session_factory = sessionmaker(bind=restored_engine)
+    try:
+        with restored_session_factory() as db:
+            restored_task = db.get(Task, 1)
+            assert restored_task is not None
+            assert restored_task.title == "復元対象ToDo"
+            assert restored_task.due_date == date(2026, 8, 31)
+            assert restored_task.priority == "high"
+    finally:
+        restored_engine.dispose()
