@@ -5,6 +5,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import update
+
 import app.backup_restore_legacy as _legacy
 from app.backup_restore_legacy import *  # noqa: F401,F403
 from app.models.task import Task
@@ -28,16 +30,24 @@ def normalize_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def insert_normalized_payload(db, payload: dict[str, Any]) -> None:
     _legacy_insert_normalized_payload(db, payload)
     for record in payload["data"]["tasks"]:
-        task = db.get(Task, record["id"])
-        if task is None:
-            raise RuntimeError(f"復元対象のToDoが見つかりません: {record['id']}")
-        task.due_date = (
-            date.fromisoformat(record["due_date"])
-            if record["due_date"] is not None
-            else None
+        result = db.execute(
+            update(Task)
+            .where(Task.id == record["id"])
+            .values(
+                due_date=(
+                    date.fromisoformat(record["due_date"])
+                    if record["due_date"] is not None
+                    else None
+                ),
+                priority=record["priority"],
+                updated_at=parse_utc_datetime(record["updated_at"]),
+            )
         )
-        task.priority = record["priority"]
-        task.updated_at = parse_utc_datetime(record["updated_at"])
+        if result.rowcount != 1:
+            raise RuntimeError(
+                f"復元対象のToDoが見つかりません: {record['id']}"
+            )
+    db.expire_all()
 
 
 def restore_backup_file(
