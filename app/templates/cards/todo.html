@@ -1,6 +1,9 @@
 <section id="todo-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
   <div class="card-heading">
-    <h2>{{ card.title }}</h2>
+    <div>
+      <h2>{{ card.title }}</h2>
+      <p class="hint">未完了は期限状態・優先度の順に表示します。</p>
+    </div>
     <button
       type="button"
       class="drag-handle"
@@ -12,15 +15,78 @@
       <span>並び替え</span>
     </button>
   </div>
-  <form action="/tasks" method="post" class="inline-form">
-    <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
+  <form action="/tasks/advanced" method="post" class="todo-create-form">
+    <label>
+      <span>タスク名</span>
+      <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
+    </label>
+    <label>
+      <span>期限</span>
+      <input type="date" name="due_date" />
+    </label>
+    <label>
+      <span>優先度</span>
+      <select name="priority">
+        <option value="high">高</option>
+        <option value="medium" selected>中</option>
+        <option value="low">低</option>
+      </select>
+    </label>
     <button type="submit">追加</button>
   </form>
-  <ul class="list">
+  <ul class="list todo-list">
     {% for task in tasks %}
-    <li id="task-{{ task.id }}" class="todo-item {% if task.is_done %}done{% endif %}">
-      <span>{{ task.title }}</span>
-      <div class="actions">
+    <li
+      id="task-{{ task.id }}"
+      class="todo-item {% if task.is_done %}done{% elif task.due_date and task.due_date < today %}overdue{% elif task.due_date == today %}due-today{% endif %}"
+    >
+      <div class="todo-content">
+        <span class="todo-title">{{ task.title }}</span>
+        <div class="todo-badges" aria-label="期限と優先度">
+          <span class="todo-badge priority priority-{{ task.priority }}">
+            優先度:
+            {% if task.priority == 'high' %}高{% elif task.priority == 'low' %}低{% else %}中{% endif %}
+          </span>
+          {% if task.due_date %}
+          <span class="todo-badge due-date">
+            {% if not task.is_done and task.due_date < today %}
+            期限切れ: {{ task.due_date.strftime('%Y/%m/%d') }}
+            {% elif not task.is_done and task.due_date == today %}
+            本日期限
+            {% else %}
+            期限: {{ task.due_date.strftime('%Y/%m/%d') }}
+            {% endif %}
+          </span>
+          {% else %}
+          <span class="todo-badge due-date no-due-date">期限なし</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <details class="todo-details-editor">
+        <summary>期限・優先度を編集</summary>
+        <form action="/tasks/{{ task.id }}/details" method="post" class="todo-details-form">
+          <label>
+            <span>期限</span>
+            <input
+              type="date"
+              name="due_date"
+              value="{{ task.due_date.isoformat() if task.due_date else '' }}"
+            />
+          </label>
+          <label>
+            <span>優先度</span>
+            <select name="priority">
+              <option value="high" {% if task.priority == 'high' %}selected{% endif %}>高</option>
+              <option value="medium" {% if task.priority == 'medium' %}selected{% endif %}>中</option>
+              <option value="low" {% if task.priority == 'low' %}selected{% endif %}>低</option>
+            </select>
+          </label>
+          <button type="submit" class="secondary-button">保存</button>
+        </form>
+      </details>
+
+      <div class="actions todo-actions">
         <form action="/tasks/{{ task.id }}/toggle" method="post">
           <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
         </form>
