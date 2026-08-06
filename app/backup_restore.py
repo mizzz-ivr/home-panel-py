@@ -37,6 +37,7 @@ def insert_normalized_payload(db, payload: dict[str, Any]) -> None:
             else None
         )
         task.priority = record["priority"]
+        task.updated_at = parse_utc_datetime(record["updated_at"])
 
 
 def restore_backup_file(
