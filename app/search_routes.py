@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.global_search import SEARCH_RESULT_LIMIT_PER_CATEGORY, GlobalSearchResults, search_all
+from app.task_routes import router as task_router
 
 BASE_DIR = Path(__file__).resolve().parent
 MIN_SEARCH_QUERY_LENGTH = 2
@@ -19,6 +20,7 @@ NO_STORE_HEADERS = {
 }
 
 router = APIRouter(tags=["search"])
+router.include_router(task_router)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
