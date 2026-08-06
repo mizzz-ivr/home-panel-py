@@ -4,7 +4,7 @@ from sqlalchemy import MetaData, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.migrations import migrate_habit_schema
+from app.migrations import migrate_home_panel_schema
 
 DATABASE_URL = "sqlite:///./home_panel.db"
 
@@ -23,7 +23,7 @@ class HomePanelMetaData(MetaData):
         tables: Any = None,
         checkfirst: bool = True,
     ) -> None:
-        migrate_habit_schema(bind)
+        migrate_home_panel_schema(bind)
         super().create_all(bind=bind, tables=tables, checkfirst=checkfirst)
 
 
