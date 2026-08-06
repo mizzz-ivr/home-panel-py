@@ -1,4 +1,4 @@
-<section class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
+<section id="todo-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
   <div class="card-heading">
     <h2>{{ card.title }}</h2>
     <button
@@ -18,7 +18,7 @@
   </form>
   <ul class="list">
     {% for task in tasks %}
-    <li class="todo-item {% if task.is_done %}done{% endif %}">
+    <li id="task-{{ task.id }}" class="todo-item {% if task.is_done %}done{% endif %}">
       <span>{{ task.title }}</span>
       <div class="actions">
         <form action="/tasks/{{ task.id }}/toggle" method="post">

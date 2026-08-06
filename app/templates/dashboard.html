@@ -6,6 +6,7 @@
     <title>Home Panel</title>
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/dashboard.css" />
+    <link rel="stylesheet" href="/static/search.css" />
     <link rel="stylesheet" href="/static/habit_undo.css" />
   </head>
   <body>
@@ -15,6 +16,20 @@
           <h1>Home Panel</h1>
           <p>今日の日付: {{ today.strftime('%Y-%m-%d') }}</p>
         </div>
+        <form action="/search" method="get" class="global-search-form" role="search">
+          <label class="sr-only" for="dashboard-search-query">横断検索</label>
+          <input
+            id="dashboard-search-query"
+            type="search"
+            name="q"
+            minlength="2"
+            maxlength="100"
+            placeholder="ToDo・メモ・時間・習慣を検索"
+            autocomplete="off"
+            required
+          />
+          <button type="submit">検索</button>
+        </form>
         <div class="header-actions">
           <a href="/history" class="button-link secondary-button">履歴を見る</a>
           <a href="/weekly" class="button-link secondary-button">週次集計</a>
@@ -62,6 +77,17 @@
       <p class="layout-hint" id="layout-help">
         各カードの「並び替え」ハンドルをドラッグすると配置を変更できます。配置はサーバーへ自動保存されます。
       </p>
+
+      {% if request.query_params.get('show_card') == 'todo' and 'todo' in dashboard_preferences.hidden %}
+      <div class="search-forced-card" aria-label="検索結果のToDo">
+        <p class="hint">検索結果を開くため、この画面だけ非表示設定のToDoカードを表示しています。</p>
+        {% for card in dashboard_all_cards %}
+          {% if card.card_id == 'todo' %}
+            {% include card.template %}
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
 
       <div
         class="dashboard-grid"
