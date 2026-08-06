@@ -1,0 +1,162 @@
+.todo-create-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) minmax(100px, auto) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.todo-create-form label,
+.todo-details-form label {
+  display: grid;
+  gap: 5px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.todo-create-form input,
+.todo-create-form select,
+.todo-details-form input,
+.todo-details-form select {
+  width: 100%;
+}
+
+.todo-list {
+  display: grid;
+  gap: 10px;
+}
+
+.todo-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.todo-item.overdue {
+  border-color: #fca5a5;
+  background: #fff7f7;
+}
+
+.todo-item.due-today {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.todo-content {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.todo-title {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.todo-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.todo-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.priority-high {
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.priority-low {
+  color: #64748b;
+}
+
+.todo-item.overdue .due-date {
+  border-color: #fca5a5;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.todo-item.due-today .due-date {
+  border-color: #fcd34d;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.no-due-date {
+  color: #64748b;
+}
+
+.todo-details-editor {
+  grid-column: 1 / -1;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+
+.todo-details-editor summary {
+  width: fit-content;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.todo-details-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(100px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.todo-actions {
+  justify-content: flex-end;
+}
+
+.todo-item.done {
+  opacity: 0.72;
+}
+
+.todo-item.done .todo-title {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+@media (max-width: 720px) {
+  .todo-create-form,
+  .todo-details-form {
+    grid-template-columns: 1fr;
+  }
+
+  .todo-create-form button,
+  .todo-details-form button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .todo-item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .todo-actions,
+  .todo-actions form,
+  .todo-actions button {
+    width: 100%;
+  }
+}
