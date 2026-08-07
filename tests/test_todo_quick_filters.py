@@ -218,6 +218,32 @@ def test_create_task_preserves_view_and_rejects_untrusted_return_context(client:
     assert unsafe.headers["location"] == "/#task-2"
 
 
+def test_details_edit_preserves_view_and_can_move_task_out_of_filter(client: TestClient):
+    with client.app.state.todo_filter_session_factory() as db:
+        task = Task(title="編集対象", priority="high")
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        task_id = task.id
+
+    response = client.post(
+        f"/tasks/{task_id}/details",
+        data={
+            "due_date": "",
+            "priority": "low",
+            "todo_view": "high",
+            "show_card": "todo",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/?todo_view=high&show_card=todo#task-{task_id}"
+    filtered = client.get("/", params={"todo_view": "high"})
+    assert "編集対象" not in filtered.text
+    assert "この条件に一致するタスクはありません。" in filtered.text
+
+
 def test_toggle_in_high_view_keeps_view_and_removes_completed_task(client: TestClient):
     with client.app.state.todo_filter_session_factory() as db:
         task = Task(title="切替対象", priority="high")
