@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.crud import task as task_crud
 from app.db import get_db
 from app.schemas.task import TaskCreate, TaskDetailsUpdate
+from app.task_views import todo_dashboard_url
 
 router = APIRouter(tags=["tasks"])
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -46,6 +47,8 @@ def create_task_with_details(
     title: str = Form(...),
     due_date: str = Form(""),
     priority: str = Form("medium"),
+    todo_view: str = Form("all"),
+    show_card: str = Form(""),
     db: Session = Depends(get_db),
 ) -> Response:
     stripped_title = title.strip()
@@ -71,7 +74,7 @@ def create_task_with_details(
         priority=payload.priority,
     )
     return RedirectResponse(
-        url=f"/#task-{task.id}",
+        url=todo_dashboard_url(todo_view, show_card=show_card, task_id=task.id),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -81,6 +84,8 @@ def update_task_details(
     task_id: int,
     due_date: str = Form(""),
     priority: str = Form(...),
+    todo_view: str = Form("all"),
+    show_card: str = Form(""),
     db: Session = Depends(get_db),
 ) -> Response:
     try:
@@ -107,6 +112,47 @@ def update_task_details(
             headers=NO_STORE_HEADERS,
         )
     return RedirectResponse(
-        url=f"/#task-{task.id}",
+        url=todo_dashboard_url(todo_view, show_card=show_card, task_id=task.id),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/tasks/{task_id}/toggle-view")
+def toggle_task_in_view(
+    task_id: int,
+    todo_view: str = Form("all"),
+    show_card: str = Form(""),
+    db: Session = Depends(get_db),
+) -> Response:
+    task = task_crud.toggle_task(db, task_id)
+    if task is None:
+        return Response(
+            content="指定されたタスクが存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+            media_type="text/plain; charset=utf-8",
+            headers=NO_STORE_HEADERS,
+        )
+    return RedirectResponse(
+        url=todo_dashboard_url(todo_view, show_card=show_card),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/tasks/{task_id}/delete-view")
+def delete_task_in_view(
+    task_id: int,
+    todo_view: str = Form("all"),
+    show_card: str = Form(""),
+    db: Session = Depends(get_db),
+) -> Response:
+    if not task_crud.delete_task(db, task_id):
+        return Response(
+            content="指定されたタスクが存在しません。",
+            status_code=status.HTTP_404_NOT_FOUND,
+            media_type="text/plain; charset=utf-8",
+            headers=NO_STORE_HEADERS,
+        )
+    return RedirectResponse(
+        url=todo_dashboard_url(todo_view, show_card=show_card),
         status_code=status.HTTP_303_SEE_OTHER,
     )

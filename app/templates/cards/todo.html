@@ -1,4 +1,53 @@
-<section id="todo-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
+{% set todo_view_keys = ('all', 'today', 'overdue', 'upcoming', 'no_due', 'high', 'completed') %}
+{% set requested_todo_view = request.query_params.get('todo_view', 'all') %}
+{% set todo_view = requested_todo_view if requested_todo_view in todo_view_keys else 'all' %}
+{% set todo_force_visible = request.query_params.get('show_card') == 'todo' %}
+{% set todo_counts = namespace(all=0, today=0, overdue=0, upcoming=0, no_due=0, high=0, completed=0) %}
+{% for task in tasks %}
+  {% set todo_counts.all = todo_counts.all + 1 %}
+  {% if task.is_done %}
+    {% set todo_counts.completed = todo_counts.completed + 1 %}
+  {% else %}
+    {% if task.due_date == today %}
+      {% set todo_counts.today = todo_counts.today + 1 %}
+    {% elif task.due_date and task.due_date < today %}
+      {% set todo_counts.overdue = todo_counts.overdue + 1 %}
+    {% elif task.due_date and task.due_date > today %}
+      {% set todo_counts.upcoming = todo_counts.upcoming + 1 %}
+    {% else %}
+      {% set todo_counts.no_due = todo_counts.no_due + 1 %}
+    {% endif %}
+    {% if task.priority == 'high' %}
+      {% set todo_counts.high = todo_counts.high + 1 %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% if todo_view == 'today' %}
+  {% set todo_selected_count = todo_counts.today %}
+{% elif todo_view == 'overdue' %}
+  {% set todo_selected_count = todo_counts.overdue %}
+{% elif todo_view == 'upcoming' %}
+  {% set todo_selected_count = todo_counts.upcoming %}
+{% elif todo_view == 'no_due' %}
+  {% set todo_selected_count = todo_counts.no_due %}
+{% elif todo_view == 'high' %}
+  {% set todo_selected_count = todo_counts.high %}
+{% elif todo_view == 'completed' %}
+  {% set todo_selected_count = todo_counts.completed %}
+{% else %}
+  {% set todo_selected_count = todo_counts.all %}
+{% endif %}
+{% macro todo_filter_link(key, label, count) -%}
+<a
+  class="todo-filter-link{% if todo_view == key %} active{% endif %}"
+  href="/?todo_view={{ key }}{% if todo_force_visible %}&amp;show_card=todo{% endif %}#todo-card"
+  {% if todo_view == key %}aria-current="page"{% endif %}
+>
+  <span>{{ label }}</span>
+  <span class="todo-filter-count" aria-label="{{ count }}件">{{ count }}</span>
+</a>
+{%- endmacro %}
+<section id="todo-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}" data-todo-view="{{ todo_view }}">
   <div class="card-heading">
     <div>
       <h2>{{ card.title }}</h2>
@@ -15,7 +64,23 @@
       <span>並び替え</span>
     </button>
   </div>
+
+  <nav class="todo-filters" aria-label="ToDo表示条件">
+    {{ todo_filter_link('all', 'すべて', todo_counts.all) }}
+    {{ todo_filter_link('today', '今日', todo_counts.today) }}
+    {{ todo_filter_link('overdue', '期限切れ', todo_counts.overdue) }}
+    {{ todo_filter_link('upcoming', '今後', todo_counts.upcoming) }}
+    {{ todo_filter_link('no_due', '期限なし', todo_counts.no_due) }}
+    {{ todo_filter_link('high', '高優先度', todo_counts.high) }}
+    {{ todo_filter_link('completed', '完了済み', todo_counts.completed) }}
+  </nav>
+  <p class="todo-filter-summary" aria-live="polite">
+    {{ todo_counts.all }}件中 {{ todo_selected_count }}件を表示
+  </p>
+
   <form action="/tasks/advanced" method="post" class="todo-create-form">
+    <input type="hidden" name="todo_view" value="{{ todo_view }}" />
+    {% if todo_force_visible %}<input type="hidden" name="show_card" value="todo" />{% endif %}
     <label>
       <span>タスク名</span>
       <input type="text" name="title" placeholder="タスクを入力" maxlength="255" required />
@@ -36,9 +101,24 @@
   </form>
   <ul class="list todo-list">
     {% for task in tasks %}
+    {% set task_visible = (
+      todo_view == 'all'
+      or (todo_view == 'completed' and task.is_done)
+      or (
+        not task.is_done
+        and (
+          (todo_view == 'today' and task.due_date == today)
+          or (todo_view == 'overdue' and task.due_date and task.due_date < today)
+          or (todo_view == 'upcoming' and task.due_date and task.due_date > today)
+          or (todo_view == 'no_due' and not task.due_date)
+          or (todo_view == 'high' and task.priority == 'high')
+        )
+      )
+    ) %}
+    {% if task_visible %}
     <li
       id="task-{{ task.id }}"
-      class="todo-item {% if task.is_done %}done{% elif task.due_date and task.due_date < today %}overdue{% elif task.due_date == today %}due-today{% endif %}"
+      class="todo-item {% if task.is_done %}done{% elif task.due_date and task.due_date < today %}overdue{% elif task.due_date == today %}due-today{% elif task.due_date %}upcoming{% else %}no-due{% endif %}"
     >
       <div class="todo-content">
         <span class="todo-title">{{ task.title }}</span>
@@ -66,6 +146,8 @@
       <details class="todo-details-editor">
         <summary>期限・優先度を編集</summary>
         <form action="/tasks/{{ task.id }}/details" method="post" class="todo-details-form">
+          <input type="hidden" name="todo_view" value="{{ todo_view }}" />
+          {% if todo_force_visible %}<input type="hidden" name="show_card" value="todo" />{% endif %}
           <label>
             <span>期限</span>
             <input
@@ -87,16 +169,24 @@
       </details>
 
       <div class="actions todo-actions">
-        <form action="/tasks/{{ task.id }}/toggle" method="post">
+        <form action="/tasks/{{ task.id }}/toggle-view" method="post">
+          <input type="hidden" name="todo_view" value="{{ todo_view }}" />
+          {% if todo_force_visible %}<input type="hidden" name="show_card" value="todo" />{% endif %}
           <button type="submit">{% if task.is_done %}未完了に戻す{% else %}完了{% endif %}</button>
         </form>
-        <form action="/tasks/{{ task.id }}/delete" method="post">
+        <form action="/tasks/{{ task.id }}/delete-view" method="post">
+          <input type="hidden" name="todo_view" value="{{ todo_view }}" />
+          {% if todo_force_visible %}<input type="hidden" name="show_card" value="todo" />{% endif %}
           <button type="submit" class="danger">削除</button>
         </form>
       </div>
     </li>
-    {% else %}
-    <li>タスクはまだありません。</li>
+    {% endif %}
     {% endfor %}
+    {% if todo_selected_count == 0 %}
+    <li class="todo-empty-state">
+      {% if todo_view == 'all' %}タスクはまだありません。{% else %}この条件に一致するタスクはありません。{% endif %}
+    </li>
+    {% endif %}
   </ul>
 </section>
