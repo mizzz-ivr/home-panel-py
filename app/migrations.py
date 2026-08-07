@@ -3,6 +3,49 @@ from __future__ import annotations
 from sqlalchemy import Engine, inspect, text
 
 from app.habit_schedule import ALL_WEEKDAYS_MASK
+from app.task_priority import DEFAULT_TASK_PRIORITY
+
+
+def migrate_task_metadata(engine: Engine) -> dict[str, bool]:
+    """既存のtasksテーブルへ期限・優先度を追加し、既定値を補完する。"""
+    inspector = inspect(engine)
+    if "tasks" not in inspector.get_table_names():
+        return {"due_date_added": False, "priority_added": False}
+
+    column_names = {column["name"] for column in inspector.get_columns("tasks")}
+    due_date_added = "due_date" not in column_names
+    priority_added = "priority" not in column_names
+
+    with engine.begin() as connection:
+        if due_date_added:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN due_date DATE"))
+        if priority_added:
+            connection.execute(
+                text(
+                    "ALTER TABLE tasks ADD COLUMN priority VARCHAR(10) "
+                    f"NOT NULL DEFAULT '{DEFAULT_TASK_PRIORITY}'"
+                )
+            )
+
+        connection.execute(
+            text(
+                "UPDATE tasks "
+                f"SET priority = '{DEFAULT_TASK_PRIORITY}' "
+                "WHERE priority IS NULL "
+                "OR priority NOT IN ('low', 'medium', 'high')"
+            )
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_tasks_due_date ON tasks (due_date)")
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_tasks_priority ON tasks (priority)")
+        )
+
+    return {
+        "due_date_added": due_date_added,
+        "priority_added": priority_added,
+    }
 
 
 def migrate_habit_archived_at(engine: Engine) -> bool:
@@ -214,4 +257,12 @@ def migrate_habit_schema(engine: Engine) -> dict[str, bool]:
     return {
         "archived_at_added": archived_at_added,
         "active_periods_created": active_periods_created,
+    }
+
+
+def migrate_home_panel_schema(engine: Engine) -> dict[str, dict[str, bool]]:
+    """Home Panel全体の軽量互換移行を順序どおり実行する。"""
+    return {
+        "tasks": migrate_task_metadata(engine),
+        "habits": migrate_habit_schema(engine),
     }
