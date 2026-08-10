@@ -25,6 +25,7 @@
 {% set focus_action_count = focus.overdue + focus.due_today + focus.pending_habits %}
 {% set focus_hours = total_minutes // 60 %}
 {% set focus_minutes = total_minutes % 60 %}
+{% set focus_todo_view = 'overdue' if focus.overdue > 0 else 'today' %}
 
 <section id="focus-card" class="card dashboard-card focus-card" data-swapy-item="{{ card.card_id }}">
   <div class="card-heading">
@@ -84,7 +85,7 @@
     <section class="focus-section" aria-labelledby="focus-todo-heading">
       <div class="focus-section-heading">
         <h3 id="focus-todo-heading">優先ToDo</h3>
-        <a href="/?todo_view=overdue&amp;show_card=todo#todo-card">ToDoを開く</a>
+        <a href="/?todo_view={{ focus_todo_view }}&amp;show_card=todo#todo-card">ToDoを開く</a>
       </div>
       {% if focus.urgent_tasks %}
       <ul class="focus-list">
