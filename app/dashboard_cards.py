@@ -14,6 +14,7 @@ class DashboardCardDefinition:
 
 
 DASHBOARD_CARDS = (
+    DashboardCardDefinition("focus", "Today Focus", "cards/focus.html"),
     DashboardCardDefinition("todo", "ToDo", "cards/todo.html"),
     DashboardCardDefinition("memo", "今日のメモ", "cards/memo.html"),
     DashboardCardDefinition("time", "学習/作業時間", "cards/time.html"),
