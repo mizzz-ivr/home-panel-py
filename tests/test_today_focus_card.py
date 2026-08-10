@@ -123,6 +123,19 @@ def test_today_focus_summarizes_urgent_tasks_habits_and_time(client: TestClient)
     assert "<form" not in focus
 
 
+def test_today_focus_todo_section_uses_today_view_when_only_today_is_due(client: TestClient):
+    create_task(client, "今日だけ", due_date=date.today(), priority="medium")
+
+    response = client.get("/")
+    focus = focus_html(response)
+
+    assert response.status_code == 200
+    assert (
+        '<a href="/?todo_view=today&amp;show_card=todo#todo-card">ToDoを開く</a>'
+        in focus
+    )
+
+
 def test_today_focus_shows_clear_state_when_no_required_action_exists(client: TestClient):
     response = client.get("/")
     focus = focus_html(response)
