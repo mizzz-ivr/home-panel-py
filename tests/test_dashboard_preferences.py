@@ -83,7 +83,10 @@ def test_dashboard_preferences_are_saved_and_applied_to_rendering(client: TestCl
     assert dashboard.text.index('data-swapy-item="time"') < dashboard.text.index(
         'data-swapy-item="habits"'
     )
-    assert dashboard.text.index('data-swapy-item="memo"') < dashboard.text.index(
+    assert dashboard.text.index('data-swapy-item="habits"') < dashboard.text.index(
+        'data-swapy-item="todo"'
+    )
+    assert dashboard.text.index('data-swapy-item="todo"') < dashboard.text.index(
         'data-swapy-item="focus"'
     )
     assert 'data-swapy-item="memo"' not in dashboard.text
