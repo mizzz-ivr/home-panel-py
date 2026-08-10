@@ -22,11 +22,12 @@ def test_legacy_task_creation_uses_backward_compatible_defaults(client: TestClie
 
 
 def test_advanced_task_creation_saves_due_date_and_priority(client: TestClient):
+    target_due_date = date.today() + timedelta(days=1)
     response = client.post(
         "/tasks/advanced",
         data={
             "title": "リリース準備",
-            "due_date": "2026-08-10",
+            "due_date": target_due_date.isoformat(),
             "priority": "high",
         },
         follow_redirects=False,
@@ -36,14 +37,14 @@ def test_advanced_task_creation_saves_due_date_and_priority(client: TestClient):
     assert response.headers["location"] == "/#task-1"
     task = get_tasks(client)[0]
     assert task.title == "リリース準備"
-    assert task.due_date == date(2026, 8, 10)
+    assert task.due_date == target_due_date
     assert task.priority == "high"
 
     dashboard = client.get("/")
     assert "リリース準備" in dashboard.text
     assert "優先度:" in dashboard.text
     assert "高" in dashboard.text
-    assert "2026/08/10" in dashboard.text
+    assert target_due_date.strftime("%Y/%m/%d") in dashboard.text
 
 
 def test_task_details_can_be_updated_and_due_date_cleared(client: TestClient):
