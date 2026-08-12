@@ -125,7 +125,7 @@ def test_current_streak_allows_today_to_be_pending():
     assert habit_crud.calculate_current_streak({today - timedelta(days=2)}, today) == 0
 
 
-def test_legacy_three_card_preferences_append_habits_and_preserve_hidden(client: TestClient):
+def test_legacy_three_card_preferences_append_new_cards_and_preserve_hidden(client: TestClient):
     session_factory = client.app.state.testing_session_factory
     with session_factory() as db:
         app_setting_crud.upsert_json_setting(
@@ -138,7 +138,7 @@ def test_legacy_three_card_preferences_append_habits_and_preserve_hidden(client:
 
     assert response.status_code == 200
     assert response.json() == {
-        "order": ["time", "todo", "memo", "habits"],
+        "order": ["time", "todo", "memo", "focus", "habits"],
         "hidden": ["memo"],
         "persisted": True,
     }

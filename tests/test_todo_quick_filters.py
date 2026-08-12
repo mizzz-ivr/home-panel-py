@@ -83,6 +83,12 @@ def task_count(client: TestClient) -> int:
         return db.scalar(select(func.count(Task.id))) or 0
 
 
+def todo_card_html(response) -> str:
+    return response.text.split('<section id="todo-card"', 1)[1].split(
+        "</section>", 1
+    )[0]
+
+
 def test_todo_view_normalization_and_redirect_are_whitelisted():
     assert normalize_todo_view("overdue") == "overdue"
     assert normalize_todo_view("unknown") == "all"
@@ -115,9 +121,10 @@ def test_due_date_views_only_render_matching_open_tasks(
     seed_tasks(client)
 
     response = client.get("/", params={"todo_view": view})
+    todo = todo_card_html(response)
 
     assert response.status_code == 200
-    assert expected_title in response.text
+    assert expected_title in todo
     for title in {
         "期限切れ高",
         "本日期限中",
@@ -126,33 +133,35 @@ def test_due_date_views_only_render_matching_open_tasks(
         "完了済み高",
         "完了済み中",
     } - {expected_title}:
-        assert title not in response.text
-    assert 'data-todo-view="' + view + '"' in response.text
-    assert "6件中 1件を表示" in response.text
+        assert title not in todo
+    assert 'data-todo-view="' + view + '"' in todo
+    assert "6件中 1件を表示" in todo
 
 
 def test_high_priority_view_excludes_completed_high_priority_tasks(client: TestClient):
     seed_tasks(client)
 
     response = client.get("/", params={"todo_view": "high"})
+    todo = todo_card_html(response)
 
     assert response.status_code == 200
-    assert "期限切れ高" in response.text
-    assert "期限なし高" in response.text
-    assert "完了済み高" not in response.text
-    assert "6件中 2件を表示" in response.text
+    assert "期限切れ高" in todo
+    assert "期限なし高" in todo
+    assert "完了済み高" not in todo
+    assert "6件中 2件を表示" in todo
 
 
 def test_completed_view_only_renders_completed_tasks(client: TestClient):
     seed_tasks(client)
 
     response = client.get("/", params={"todo_view": "completed"})
+    todo = todo_card_html(response)
 
     assert response.status_code == 200
-    assert "完了済み高" in response.text
-    assert "完了済み中" in response.text
-    assert "期限切れ高" not in response.text
-    assert "6件中 2件を表示" in response.text
+    assert "完了済み高" in todo
+    assert "完了済み中" in todo
+    assert "期限切れ高" not in todo
+    assert "6件中 2件を表示" in todo
 
 
 def test_invalid_view_falls_back_to_all_without_mutating_tasks(client: TestClient):
@@ -160,12 +169,13 @@ def test_invalid_view_falls_back_to_all_without_mutating_tasks(client: TestClien
     before = task_count(client)
 
     response = client.get("/", params={"todo_view": "not-a-view"})
+    todo = todo_card_html(response)
 
     assert response.status_code == 200
-    assert 'data-todo-view="all"' in response.text
-    assert "6件中 6件を表示" in response.text
-    assert "期限切れ高" in response.text
-    assert "完了済み中" in response.text
+    assert 'data-todo-view="all"' in todo
+    assert "6件中 6件を表示" in todo
+    assert "期限切れ高" in todo
+    assert "完了済み中" in todo
     assert task_count(client) == before
 
 
@@ -176,13 +186,14 @@ def test_filter_links_and_forms_preserve_forced_todo_card_context(client: TestCl
         "/",
         params={"todo_view": "high", "show_card": "todo"},
     )
+    todo = todo_card_html(response)
 
     assert response.status_code == 200
-    assert 'name="todo_view" value="high"' in response.text
-    assert 'name="show_card" value="todo"' in response.text
+    assert 'name="todo_view" value="high"' in todo
+    assert 'name="show_card" value="todo"' in todo
     assert (
         'href="/?todo_view=overdue&amp;show_card=todo#todo-card"'
-        in response.text
+        in todo
     )
 
 
@@ -240,8 +251,9 @@ def test_details_edit_preserves_view_and_can_move_task_out_of_filter(client: Tes
     assert response.status_code == 303
     assert response.headers["location"] == f"/?todo_view=high&show_card=todo#task-{task_id}"
     filtered = client.get("/", params={"todo_view": "high"})
-    assert "編集対象" not in filtered.text
-    assert "この条件に一致するタスクはありません。" in filtered.text
+    todo = todo_card_html(filtered)
+    assert "編集対象" not in todo
+    assert "この条件に一致するタスクはありません。" in todo
 
 
 def test_toggle_in_high_view_keeps_view_and_removes_completed_task(client: TestClient):
@@ -262,8 +274,9 @@ def test_toggle_in_high_view_keeps_view_and_removes_completed_task(client: TestC
     assert response.headers["location"] == "/?todo_view=high#todo-card"
 
     filtered = client.get("/", params={"todo_view": "high"})
-    assert "切替対象" not in filtered.text
-    assert "この条件に一致するタスクはありません。" in filtered.text
+    todo = todo_card_html(filtered)
+    assert "切替対象" not in todo
+    assert "この条件に一致するタスクはありません。" in todo
 
 
 def test_delete_in_view_preserves_context_and_deletes_only_target(client: TestClient):

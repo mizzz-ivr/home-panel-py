@@ -1,0 +1,143 @@
+{% set focus = namespace(overdue=0, due_today=0, pending_habits=0, urgent_tasks=[], pending_habit_items=[]) %}
+{% for task in tasks %}
+  {% if not task.is_done and task.due_date %}
+    {% if task.due_date < today %}
+      {% set focus.overdue = focus.overdue + 1 %}
+      {% if focus.urgent_tasks|length < 5 %}
+        {% set focus.urgent_tasks = focus.urgent_tasks + [task] %}
+      {% endif %}
+    {% elif task.due_date == today %}
+      {% set focus.due_today = focus.due_today + 1 %}
+      {% if focus.urgent_tasks|length < 5 %}
+        {% set focus.urgent_tasks = focus.urgent_tasks + [task] %}
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% for item in habit_items %}
+  {% if item.scheduled_today and not item.completed_today %}
+    {% set focus.pending_habits = focus.pending_habits + 1 %}
+    {% if focus.pending_habit_items|length < 5 %}
+      {% set focus.pending_habit_items = focus.pending_habit_items + [item] %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% set focus_action_count = focus.overdue + focus.due_today + focus.pending_habits %}
+{% set focus_hours = total_minutes // 60 %}
+{% set focus_minutes = total_minutes % 60 %}
+{% set focus_todo_view = 'overdue' if focus.overdue > 0 else 'today' %}
+
+<section id="focus-card" class="card dashboard-card focus-card" data-swapy-item="{{ card.card_id }}">
+  <div class="card-heading">
+    <div>
+      <h2>{{ card.title }}</h2>
+      <p class="hint">今日優先して確認したい項目をまとめています。</p>
+    </div>
+    <button
+      type="button"
+      class="drag-handle"
+      data-swapy-handle
+      aria-label="{{ card.title }}カードを並び替え"
+      title="ドラッグして並び替え"
+    >
+      <span aria-hidden="true">⠿</span>
+      <span>並び替え</span>
+    </button>
+  </div>
+
+  {% if focus_action_count == 0 %}
+  <div class="focus-clear" role="status">
+    <strong>今日の必須アクションは片付いています。</strong>
+    <span>期限到来ToDoと今日対象の未達成習慣はありません。</span>
+  </div>
+  {% else %}
+  <p class="focus-attention" role="status">
+    今日確認したい項目が <strong>{{ focus_action_count }}件</strong> あります。
+  </p>
+  {% endif %}
+
+  <div class="focus-metrics" aria-label="今日の概要">
+    <a class="focus-metric {% if focus.overdue > 0 %}attention{% endif %}" href="/?todo_view=overdue&amp;show_card=todo#todo-card">
+      <span>期限切れToDo</span>
+      <strong>{{ focus.overdue }}</strong>
+      <small>件</small>
+    </a>
+    <a class="focus-metric {% if focus.due_today > 0 %}warning{% endif %}" href="/?todo_view=today&amp;show_card=todo#todo-card">
+      <span>本日期限ToDo</span>
+      <strong>{{ focus.due_today }}</strong>
+      <small>件</small>
+    </a>
+    <a class="focus-metric" href="/habits/manage">
+      <span>未達成の習慣</span>
+      <strong>{{ focus.pending_habits }}</strong>
+      <small>/ {{ habit_total }}件</small>
+    </a>
+    <a class="focus-metric" href="/history?target_date={{ today.isoformat() }}">
+      <span>今日の記録時間</span>
+      <strong>
+        {% if focus_hours > 0 %}{{ focus_hours }}時間{% endif %}{{ focus_minutes }}分
+      </strong>
+      <small>{{ entries|length }}件の記録</small>
+    </a>
+  </div>
+
+  <div class="focus-sections">
+    <section class="focus-section" aria-labelledby="focus-todo-heading">
+      <div class="focus-section-heading">
+        <h3 id="focus-todo-heading">優先ToDo</h3>
+        <a href="/?todo_view={{ focus_todo_view }}&amp;show_card=todo#todo-card">ToDoを開く</a>
+      </div>
+      {% if focus.urgent_tasks %}
+      <ul class="focus-list">
+        {% for task in focus.urgent_tasks %}
+        <li>
+          <a href="/?todo_view={% if task.due_date < today %}overdue{% else %}today{% endif %}&amp;show_card=todo#task-{{ task.id }}">
+            <span class="focus-item-title">{{ task.title }}</span>
+            <span class="focus-item-meta">
+              {% if task.due_date < today %}
+              期限切れ {{ task.due_date.strftime('%Y/%m/%d') }}
+              {% else %}
+              本日期限
+              {% endif %}
+              ・優先度{% if task.priority == 'high' %}高{% elif task.priority == 'low' %}低{% else %}中{% endif %}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if focus.overdue + focus.due_today > focus.urgent_tasks|length %}
+      <p class="hint">ほか {{ focus.overdue + focus.due_today - focus.urgent_tasks|length }}件あります。</p>
+      {% endif %}
+      {% else %}
+      <p class="focus-empty">期限切れ・本日期限の未完了ToDoはありません。</p>
+      {% endif %}
+    </section>
+
+    <section class="focus-section" aria-labelledby="focus-habit-heading">
+      <div class="focus-section-heading">
+        <h3 id="focus-habit-heading">今日の習慣</h3>
+        <a href="/habits/manage">習慣を管理</a>
+      </div>
+      {% if habit_total == 0 %}
+      <p class="focus-empty">今日は対象の習慣がありません。</p>
+      {% elif focus.pending_habit_items %}
+      <p class="focus-progress">達成 {{ habit_completed_today }}/{{ habit_total }}件</p>
+      <ul class="focus-list">
+        {% for item in focus.pending_habit_items %}
+        <li>
+          <a href="/habits/manage#habit-{{ item.habit.id }}">
+            <span class="focus-item-title">{{ item.habit.name }}</span>
+            <span class="focus-item-meta">未達成・{{ item.schedule_label }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if focus.pending_habits > focus.pending_habit_items|length %}
+      <p class="hint">ほか {{ focus.pending_habits - focus.pending_habit_items|length }}件あります。</p>
+      {% endif %}
+      {% else %}
+      <p class="focus-empty">今日対象の習慣はすべて達成済みです。</p>
+      {% endif %}
+    </section>
+  </div>
+</section>
