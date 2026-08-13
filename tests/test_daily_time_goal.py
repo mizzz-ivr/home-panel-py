@@ -97,7 +97,7 @@ def test_daily_time_goal_progress_updates_from_today_entries(client: TestClient)
     assert 'value="79"' in card
     assert "目標まであと <strong>25分</strong>" in card
     assert "79%・残り25分" in focus
-    assert 'href="/#time-card"' in focus
+    assert 'href="/?show_card=time#time-card"' in focus
 
 
 def test_daily_time_goal_keeps_actual_percentage_over_one_hundred(client: TestClient):
@@ -183,6 +183,33 @@ def test_invalid_persisted_goal_falls_back_to_unset_without_crashing(client: Tes
     assert "目標を設定すると、今日の進捗と残り時間を確認できます。" in time_card_html(
         response
     )
+
+
+def test_hidden_time_card_can_be_temporarily_shown_from_focus_link(client: TestClient):
+    saved = client.put(
+        "/api/dashboard/preferences",
+        json={
+            "order": ["focus", "todo", "memo", "time", "habits"],
+            "hidden": ["time"],
+        },
+    )
+    assert saved.status_code == 200
+
+    hidden_dashboard = client.get("/")
+    assert 'data-swapy-item="time"' not in hidden_dashboard.text
+
+    forced_dashboard = client.get("/", params={"show_card": "time"})
+    assert forced_dashboard.status_code == 200
+    assert 'data-swapy-item="time"' in forced_dashboard.text
+    assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" in forced_dashboard.text
+    assert 'id="time-card"' in forced_dashboard.text
+
+
+def test_unknown_show_card_does_not_render_extra_card(client: TestClient):
+    response = client.get("/", params={"show_card": "unknown"})
+
+    assert response.status_code == 200
+    assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" not in response.text
 
 
 def test_daily_time_goal_service_rejects_bool_and_calculates_status(client: TestClient):
