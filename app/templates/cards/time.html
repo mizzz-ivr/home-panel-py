@@ -47,8 +47,9 @@
     {% endif %}
     {% endif %}
 
+    {% set preserve_time_card = request.query_params.get('show_card') == 'time' %}
     <div class="time-goal-actions">
-      <form action="/settings/daily-time-goal" method="post" class="time-goal-form">
+      <form action="/settings/daily-time-goal{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="time-goal-form">
         <label for="daily-time-goal-minutes">目標（分）</label>
         <input
           id="daily-time-goal-minutes"
@@ -63,7 +64,7 @@
         <button type="submit">目標を保存</button>
       </form>
       {% if daily_time_goal_status.configured %}
-      <form action="/settings/daily-time-goal" method="post">
+      <form action="/settings/daily-time-goal{% if preserve_time_card %}?show_card=time{% endif %}" method="post">
         <input type="hidden" name="minutes" value="0" />
         <button type="submit" class="secondary-button">目標を解除</button>
       </form>
