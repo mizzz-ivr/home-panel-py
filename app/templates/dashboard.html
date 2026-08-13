@@ -84,7 +84,11 @@
       {% set forced_card_id = request.query_params.get('show_card') %}
       {% if forced_card_id and forced_card_id in dashboard_preferences.hidden %}
       <div class="search-forced-card" aria-label="一時表示カード">
+        {% if forced_card_id == 'todo' %}
+        <p class="hint">検索結果を開くため、この画面だけ非表示設定のToDoカードを表示しています。</p>
+        {% else %}
         <p class="hint">リンク先を開くため、この画面だけ非表示設定のカードを表示しています。</p>
+        {% endif %}
         {% for card in dashboard_all_cards %}
           {% if card.card_id == forced_card_id %}
             {% include card.template %}
