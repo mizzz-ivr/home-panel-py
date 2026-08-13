@@ -37,7 +37,11 @@ def load_daily_time_goal(db: Session) -> int | None:
 
 
 def save_daily_time_goal(db: Session, minutes: int) -> None:
-    if not MIN_DAILY_TIME_GOAL_MINUTES <= minutes <= MAX_DAILY_TIME_GOAL_MINUTES:
+    if (
+        isinstance(minutes, bool)
+        or not isinstance(minutes, int)
+        or not MIN_DAILY_TIME_GOAL_MINUTES <= minutes <= MAX_DAILY_TIME_GOAL_MINUTES
+    ):
         raise ValueError(
             f"1日の時間目標は{MIN_DAILY_TIME_GOAL_MINUTES}〜{MAX_DAILY_TIME_GOAL_MINUTES}分で指定してください。"
         )
