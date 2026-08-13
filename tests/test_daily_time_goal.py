@@ -50,6 +50,17 @@ def focus_card_html(response) -> str:
     )[0]
 
 
+def hide_time_card(client: TestClient) -> None:
+    saved = client.put(
+        "/api/dashboard/preferences",
+        json={
+            "order": ["focus", "todo", "memo", "time", "habits"],
+            "hidden": ["time"],
+        },
+    )
+    assert saved.status_code == 200
+
+
 def test_daily_time_goal_is_unset_by_default(client: TestClient):
     response = client.get("/")
 
@@ -186,14 +197,7 @@ def test_invalid_persisted_goal_falls_back_to_unset_without_crashing(client: Tes
 
 
 def test_hidden_time_card_can_be_temporarily_shown_from_focus_link(client: TestClient):
-    saved = client.put(
-        "/api/dashboard/preferences",
-        json={
-            "order": ["focus", "todo", "memo", "time", "habits"],
-            "hidden": ["time"],
-        },
-    )
-    assert saved.status_code == 200
+    hide_time_card(client)
 
     hidden_dashboard = client.get("/")
     assert 'data-swapy-item="time"' not in hidden_dashboard.text
@@ -203,6 +207,57 @@ def test_hidden_time_card_can_be_temporarily_shown_from_focus_link(client: TestC
     assert 'data-swapy-item="time"' in forced_dashboard.text
     assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" in forced_dashboard.text
     assert 'id="time-card"' in forced_dashboard.text
+    assert 'action="/settings/daily-time-goal?show_card=time"' in forced_dashboard.text
+
+
+def test_hidden_time_card_goal_save_and_clear_preserve_temporary_visibility(
+    client: TestClient,
+):
+    hide_time_card(client)
+
+    saved = client.post(
+        "/settings/daily-time-goal",
+        params={"show_card": "time"},
+        data={"minutes": "120"},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/?show_card=time#time-card"
+
+    saved_dashboard = client.get("/", params={"show_card": "time"})
+    assert "目標 120分に対して 0%" in time_card_html(saved_dashboard)
+
+    cleared = client.post(
+        "/settings/daily-time-goal",
+        params={"show_card": "time"},
+        data={"minutes": "0"},
+        follow_redirects=False,
+    )
+    assert cleared.status_code == 303
+    assert cleared.headers["location"] == "/?show_card=time#time-card"
+    with client.app.state.daily_time_goal_session_factory() as db:
+        assert load_daily_time_goal(db) is None
+
+
+def test_hidden_time_card_invalid_goal_keeps_error_and_temporary_visibility(
+    client: TestClient,
+):
+    hide_time_card(client)
+    client.post("/settings/daily-time-goal", data={"minutes": "120"})
+
+    response = client.post(
+        "/settings/daily-time-goal",
+        params={"show_card": "time"},
+        data={"minutes": "abc"},
+    )
+
+    assert response.status_code == 400
+    assert "1日の時間目標は1〜1440分の整数で入力してください。" in response.text
+    assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" in response.text
+    assert 'id="time-card"' in response.text
+    assert 'action="/settings/daily-time-goal?show_card=time"' in response.text
+    with client.app.state.daily_time_goal_session_factory() as db:
+        assert load_daily_time_goal(db) == 120
 
 
 def test_unknown_show_card_does_not_render_extra_card(client: TestClient):
