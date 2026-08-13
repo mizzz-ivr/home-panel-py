@@ -119,7 +119,7 @@ def test_today_focus_summarizes_urgent_tasks_habits_and_time(client: TestClient)
     assert '/?todo_view=overdue&amp;show_card=todo#todo-card' in focus
     assert '/?todo_view=today&amp;show_card=todo#todo-card' in focus
     assert '/habits/manage#habit-1' in focus
-    assert f'/history?target_date={today.isoformat()}' in focus
+    assert '/?show_card=time#time-card' in focus
     assert "<form" not in focus
 
 
