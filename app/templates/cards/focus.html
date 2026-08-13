@@ -72,12 +72,20 @@
       <strong>{{ focus.pending_habits }}</strong>
       <small>/ {{ habit_total }}件</small>
     </a>
-    <a class="focus-metric" href="/history?target_date={{ today.isoformat() }}">
+    <a class="focus-metric" href="/#time-card">
       <span>今日の記録時間</span>
       <strong>
         {% if focus_hours > 0 %}{{ focus_hours }}時間{% endif %}{{ focus_minutes }}分
       </strong>
+      {% if daily_time_goal_status.configured %}
+        {% if daily_time_goal_status.achieved %}
+        <small>{{ daily_time_goal_status.percentage }}%・目標達成</small>
+        {% else %}
+        <small>{{ daily_time_goal_status.percentage }}%・残り{{ daily_time_goal_status.remaining_minutes }}分</small>
+        {% endif %}
+      {% else %}
       <small>{{ entries|length }}件の記録</small>
+      {% endif %}
     </a>
   </div>
 
