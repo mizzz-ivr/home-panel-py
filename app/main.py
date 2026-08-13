@@ -326,10 +326,10 @@ def parse_month(value: str) -> date | None:
         return None
 
 
-def daily_time_goal_return_url(request: Request) -> str:
+def time_card_return_url(request: Request, default_url: str) -> str:
     if request.query_params.get("show_card") == "time":
         return "/?show_card=time#time-card"
-    return "/#time-card"
+    return default_url
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -369,7 +369,7 @@ def reset_dashboard_preferences(db: Session = Depends(get_db)) -> JSONResponse:
 @app.post("/settings/daily-time-goal")
 def update_daily_time_goal(
     request: Request,
-    minutes: str = Form(...),
+    minutes: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
@@ -385,7 +385,7 @@ def update_daily_time_goal(
     if parsed_minutes == 0:
         clear_daily_time_goal(db)
         return RedirectResponse(
-            url=daily_time_goal_return_url(request),
+            url=time_card_return_url(request, "/#time-card"),
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
@@ -400,7 +400,7 @@ def update_daily_time_goal(
         )
 
     return RedirectResponse(
-        url=daily_time_goal_return_url(request),
+        url=time_card_return_url(request, "/#time-card"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -725,4 +725,7 @@ def add_time_entry(
         payload.note,
         category=payload.category.value,
     )
-    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=time_card_return_url(request, "/"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
