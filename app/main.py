@@ -326,6 +326,12 @@ def parse_month(value: str) -> date | None:
         return None
 
 
+def daily_time_goal_return_url(request: Request) -> str:
+    if request.query_params.get("show_card") == "time":
+        return "/?show_card=time#time-card"
+    return "/#time-card"
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return render_dashboard(request, db)
@@ -378,7 +384,10 @@ def update_daily_time_goal(
 
     if parsed_minutes == 0:
         clear_daily_time_goal(db)
-        return RedirectResponse(url="/#time-card", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            url=daily_time_goal_return_url(request),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     try:
         save_daily_time_goal(db, parsed_minutes)
@@ -390,7 +399,10 @@ def update_daily_time_goal(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    return RedirectResponse(url="/#time-card", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=daily_time_goal_return_url(request),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @app.get("/history", response_class=HTMLResponse)
