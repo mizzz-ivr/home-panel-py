@@ -30,6 +30,12 @@ from app.schemas.memo import DailyMemoUpdate
 from app.schemas.task import TaskCreate
 from app.schemas.time_entry import TIME_ENTRY_CATEGORIES, TimeEntryCreate
 from app.search_routes import router as search_router
+from app.time_goal import (
+    build_daily_time_goal_status,
+    clear_daily_time_goal,
+    load_daily_time_goal,
+    save_daily_time_goal,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -77,6 +83,10 @@ def render_dashboard(
     entries = time_entry_crud.list_today_entries(db, today)
     total_minutes = time_entry_crud.get_today_total_minutes(db, today)
     category_totals = time_entry_crud.get_today_category_totals(db, today)
+    daily_time_goal_status = build_daily_time_goal_status(
+        load_daily_time_goal(db),
+        total_minutes,
+    )
     habit_items, habit_completed_today, habit_total = habit_crud.get_dashboard_summary(db, today)
     dashboard_preferences = get_dashboard_preferences(db)
     dashboard_preferences_payload = dashboard_preferences.to_dict()
@@ -93,6 +103,7 @@ def render_dashboard(
             "total_minutes": total_minutes,
             "category_totals": category_totals,
             "time_entry_categories": TIME_ENTRY_CATEGORIES,
+            "daily_time_goal_status": daily_time_goal_status,
             "habit_items": habit_items,
             "habit_completed_today": habit_completed_today,
             "habit_total": habit_total,
@@ -347,6 +358,39 @@ def update_dashboard_preferences(
 def reset_dashboard_preferences(db: Session = Depends(get_db)) -> JSONResponse:
     app_setting_crud.delete_setting(db, DASHBOARD_PREFERENCES_KEY)
     return dashboard_preferences_response(default_dashboard_preferences())
+
+
+@app.post("/settings/daily-time-goal")
+def update_daily_time_goal(
+    request: Request,
+    minutes: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        parsed_minutes = int(minutes)
+    except ValueError:
+        return render_dashboard(
+            request,
+            db,
+            "1日の時間目標は1〜1440分の整数で入力してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if parsed_minutes == 0:
+        clear_daily_time_goal(db)
+        return RedirectResponse(url="/#time-card", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        save_daily_time_goal(db, parsed_minutes)
+    except ValueError:
+        return render_dashboard(
+            request,
+            db,
+            "1日の時間目標は1〜1440分の整数で入力してください。",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return RedirectResponse(url="/#time-card", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/history", response_class=HTMLResponse)
