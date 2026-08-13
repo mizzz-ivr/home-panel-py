@@ -208,6 +208,7 @@ def test_hidden_time_card_can_be_temporarily_shown_from_focus_link(client: TestC
     assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" in forced_dashboard.text
     assert 'id="time-card"' in forced_dashboard.text
     assert 'action="/settings/daily-time-goal?show_card=time"' in forced_dashboard.text
+    assert 'action="/time-entries?show_card=time"' in forced_dashboard.text
 
 
 def test_hidden_time_card_goal_save_and_clear_preserve_temporary_visibility(
@@ -258,6 +259,44 @@ def test_hidden_time_card_invalid_goal_keeps_error_and_temporary_visibility(
     assert 'action="/settings/daily-time-goal?show_card=time"' in response.text
     with client.app.state.daily_time_goal_session_factory() as db:
         assert load_daily_time_goal(db) == 120
+
+
+def test_hidden_time_card_time_entry_save_preserves_temporary_visibility(
+    client: TestClient,
+):
+    hide_time_card(client)
+
+    response = client.post(
+        "/time-entries",
+        params={"show_card": "time"},
+        data={"category": "作業", "minutes": "30", "note": "集中"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?show_card=time#time-card"
+    dashboard = client.get("/", params={"show_card": "time"})
+    card = time_card_html(dashboard)
+    assert "30分" in card
+    assert "集中" in card
+
+
+def test_hidden_time_card_time_entry_error_preserves_temporary_visibility(
+    client: TestClient,
+):
+    hide_time_card(client)
+
+    response = client.post(
+        "/time-entries",
+        params={"show_card": "time"},
+        data={"category": "不正カテゴリ", "minutes": "30", "note": ""},
+    )
+
+    assert response.status_code == 400
+    assert "カテゴリは学習・作業・個人開発・その他から選択してください。" in response.text
+    assert "リンク先を開くため、この画面だけ非表示設定のカードを表示しています。" in response.text
+    assert 'id="time-card"' in response.text
+    assert 'action="/time-entries?show_card=time"' in response.text
 
 
 def test_unknown_show_card_does_not_render_extra_card(client: TestClient):
