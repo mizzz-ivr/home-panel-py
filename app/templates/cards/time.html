@@ -85,7 +85,7 @@
     {% endfor %}
   </ul>
   {% endif %}
-  <form action="/time-entries" method="post" class="inline-form">
+  <form action="/time-entries{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="inline-form">
     <label for="time-category" class="sr-only">カテゴリ</label>
     <select id="time-category" name="category" class="secondary-button" required>
       {% for category in time_entry_categories %}
