@@ -44,7 +44,9 @@ jobs:
         run: python -m compileall -q app tests
 
       - name: JavaScript構文を確認
-        run: node --check app/static/app.js
+        run: |
+          node --check app/static/app.js
+          node --check app/static/time_timer.js
 
       - name: FastAPIアプリを読み込み
         run: python -c "from app.main import app; assert app.title == 'Home Panel'"
