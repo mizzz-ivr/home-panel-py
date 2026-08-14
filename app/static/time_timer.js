@@ -10,6 +10,7 @@
   const STORAGE_VERSION = 1;
   const MIN_MINUTES = 1;
   const MAX_MINUTES = 1440;
+  const RESTORE_TOLERANCE_SECONDS = 1;
 
   const minutesInput = document.getElementById("time-minutes");
   const display = root.querySelector("[data-timer-display]");
@@ -305,6 +306,15 @@
       typeof parsed.endAtMs === "number" &&
       Number.isFinite(parsed.endAtMs)
     ) {
+      const remainingSeconds = Math.ceil((parsed.endAtMs - Date.now()) / 1000);
+      const maximumRemainingSeconds =
+        parsed.durationMinutes * 60 + RESTORE_TOLERANCE_SECONDS;
+
+      if (remainingSeconds > maximumRemainingSeconds) {
+        safeRemoveStoredState();
+        return false;
+      }
+
       timerState = {
         status: "running",
         durationMinutes: parsed.durationMinutes,
@@ -312,7 +322,7 @@
         endAtMs: parsed.endAtMs,
       };
 
-      if (remainingSecondsForRunningState() <= 0) {
+      if (remainingSeconds <= 0) {
         completeTimer();
       } else {
         render();
