@@ -82,6 +82,18 @@ def test_running_timer_restore_rejects_remaining_time_beyond_saved_duration(
     assert "removeStoredStateIfUnchanged(rawValue);" in script.text
 
 
+def test_live_running_timer_never_increases_after_clock_moves_backward(
+    client: TestClient,
+):
+    script = client.get("/static/time_timer.js")
+
+    assert script.status_code == 200
+    assert "const maximumSeconds = timerState.durationMinutes * 60;" in script.text
+    assert "const previousSeconds = Number.isInteger(timerState.remainingSeconds)" in script.text
+    assert "const boundedSeconds = Math.min(" in script.text
+    assert "timerState.remainingSeconds = boundedSeconds;" in script.text
+
+
 def test_focus_timer_storage_removal_is_scoped_to_the_current_timer(
     client: TestClient,
 ):
@@ -94,6 +106,19 @@ def test_focus_timer_storage_removal_is_scoped_to_the_current_timer(
     assert "removeStoredStateIfOwned(completedTimerId)" in script.text
     assert "removeStoredStateIfOwned(resetTimerId)" in script.text
     assert "removeItem(STORAGE_KEY)" in script.text
+
+
+def test_focus_timer_stale_transitions_do_not_overwrite_a_newer_tab(
+    client: TestClient,
+):
+    script = client.get("/static/time_timer.js")
+
+    assert script.status_code == 200
+    assert "const storedStateIsOwnedBy = (timerId) =>" in script.text
+    assert "const persistState = ({ allowReplace = false } = {}) =>" in script.text
+    assert "!allowReplace && !storedStateIsOwnedBy(payload.timerId)" in script.text
+    assert "persistState({ allowReplace: true });" in script.text
+    assert script.text.count("const persisted = persistState();") == 2
 
 
 def test_focus_timer_is_available_when_hidden_time_card_is_temporarily_shown(
