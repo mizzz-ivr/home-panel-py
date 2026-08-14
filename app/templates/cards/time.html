@@ -1,13 +1,7 @@
 <section id="time-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
   <div class="card-heading">
     <h2>{{ card.title }}</h2>
-    <button
-      type="button"
-      class="drag-handle"
-      data-swapy-handle
-      aria-label="{{ card.title }}カードを並び替え"
-      title="ドラッグして並び替え"
-    >
+    <button type="button" class="drag-handle" data-swapy-handle aria-label="{{ card.title }}カードを並び替え" title="ドラッグして並び替え">
       <span aria-hidden="true">⠿</span>
       <span>並び替え</span>
     </button>
@@ -30,12 +24,7 @@
     </div>
 
     {% if daily_time_goal_status.configured %}
-    <progress
-      class="time-goal-progress"
-      value="{{ daily_time_goal_status.progress_percentage }}"
-      max="100"
-      aria-label="1日の時間目標の達成率"
-    >{{ daily_time_goal_status.progress_percentage }}%</progress>
+    <progress class="time-goal-progress" value="{{ daily_time_goal_status.progress_percentage }}" max="100" aria-label="1日の時間目標の達成率">{{ daily_time_goal_status.progress_percentage }}%</progress>
     {% if daily_time_goal_status.achieved %}
       {% if daily_time_goal_status.exceeded_minutes > 0 %}
       <p class="time-goal-state achieved">目標達成・{{ daily_time_goal_status.exceeded_minutes }}分上回っています。</p>
@@ -51,16 +40,7 @@
     <div class="time-goal-actions">
       <form action="/settings/daily-time-goal{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="time-goal-form">
         <label for="daily-time-goal-minutes">目標（分）</label>
-        <input
-          id="daily-time-goal-minutes"
-          type="number"
-          name="minutes"
-          min="1"
-          max="1440"
-          value="{{ daily_time_goal_status.goal_minutes if daily_time_goal_status.configured else '' }}"
-          placeholder="例: 120"
-          required
-        />
+        <input id="daily-time-goal-minutes" type="number" name="minutes" min="1" max="1440" value="{{ daily_time_goal_status.goal_minutes if daily_time_goal_status.configured else '' }}" placeholder="例: 120" required />
         <button type="submit">目標を保存</button>
       </form>
       {% if daily_time_goal_status.configured %}
@@ -85,6 +65,29 @@
     {% endfor %}
   </ul>
   {% endif %}
+
+  <section class="focus-timer-panel" data-focus-timer aria-labelledby="focus-timer-heading">
+    <div class="focus-timer-heading">
+      <div>
+        <h3 id="focus-timer-heading">フォーカスタイマー</h3>
+        <p class="hint">記録フォームの分数を使って計測します。完了しても自動登録せず、内容を確認してから追加できます。</p>
+      </div>
+      <output class="focus-timer-display" data-timer-display role="timer" aria-label="フォーカスタイマーの残り時間">--:--</output>
+    </div>
+    <div class="focus-timer-presets" role="group" aria-label="タイマー時間のクイック設定">
+      {% for preset_minutes in (15, 25, 50, 90) %}
+      <button type="button" class="secondary-button" data-timer-preset="{{ preset_minutes }}" aria-controls="time-minutes">{{ preset_minutes }}分</button>
+      {% endfor %}
+    </div>
+    <div class="focus-timer-actions">
+      <button type="button" data-timer-start aria-controls="time-minutes">開始</button>
+      <button type="button" data-timer-pause hidden>一時停止</button>
+      <button type="button" data-timer-resume hidden>再開</button>
+      <button type="button" class="secondary-button" data-timer-reset hidden>リセット</button>
+    </div>
+    <p class="focus-timer-status" data-timer-status aria-live="polite">分数を入力するかプリセットを選んで開始してください。</p>
+  </section>
+
   <form action="/time-entries{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="inline-form">
     <label for="time-category" class="sr-only">カテゴリ</label>
     <select id="time-category" name="category" class="secondary-button" required>
