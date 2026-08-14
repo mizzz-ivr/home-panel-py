@@ -79,7 +79,21 @@ def test_running_timer_restore_rejects_remaining_time_beyond_saved_duration(
     assert "RESTORE_TOLERANCE_SECONDS = 1" in script.text
     assert "parsed.durationMinutes * 60 + RESTORE_TOLERANCE_SECONDS" in script.text
     assert "remainingSeconds > maximumRemainingSeconds" in script.text
-    assert "safeRemoveStoredState();" in script.text
+    assert "removeStoredStateIfUnchanged(rawValue);" in script.text
+
+
+def test_focus_timer_storage_removal_is_scoped_to_the_current_timer(
+    client: TestClient,
+):
+    script = client.get("/static/time_timer.js")
+
+    assert script.status_code == 200
+    assert "timerId: createTimerId()" in script.text
+    assert "timerId: timerState.timerId" in script.text
+    assert "parsed.timerId === timerId" in script.text
+    assert "removeStoredStateIfOwned(completedTimerId)" in script.text
+    assert "removeStoredStateIfOwned(resetTimerId)" in script.text
+    assert "removeItem(STORAGE_KEY)" in script.text
 
 
 def test_focus_timer_is_available_when_hidden_time_card_is_temporarily_shown(
