@@ -1,7 +1,13 @@
 <section id="time-card" class="card dashboard-card" data-swapy-item="{{ card.card_id }}">
   <div class="card-heading">
     <h2>{{ card.title }}</h2>
-    <button type="button" class="drag-handle" data-swapy-handle aria-label="{{ card.title }}カードを並び替え" title="ドラッグして並び替え">
+    <button
+      type="button"
+      class="drag-handle"
+      data-swapy-handle
+      aria-label="{{ card.title }}カードを並び替え"
+      title="ドラッグして並び替え"
+    >
       <span aria-hidden="true">⠿</span>
       <span>並び替え</span>
     </button>
@@ -24,7 +30,12 @@
     </div>
 
     {% if daily_time_goal_status.configured %}
-    <progress class="time-goal-progress" value="{{ daily_time_goal_status.progress_percentage }}" max="100" aria-label="1日の時間目標の達成率">{{ daily_time_goal_status.progress_percentage }}%</progress>
+    <progress
+      class="time-goal-progress"
+      value="{{ daily_time_goal_status.progress_percentage }}"
+      max="100"
+      aria-label="1日の時間目標の達成率"
+    >{{ daily_time_goal_status.progress_percentage }}%</progress>
     {% if daily_time_goal_status.achieved %}
       {% if daily_time_goal_status.exceeded_minutes > 0 %}
       <p class="time-goal-state achieved">目標達成・{{ daily_time_goal_status.exceeded_minutes }}分上回っています。</p>
@@ -40,7 +51,16 @@
     <div class="time-goal-actions">
       <form action="/settings/daily-time-goal{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="time-goal-form">
         <label for="daily-time-goal-minutes">目標（分）</label>
-        <input id="daily-time-goal-minutes" type="number" name="minutes" min="1" max="1440" value="{{ daily_time_goal_status.goal_minutes if daily_time_goal_status.configured else '' }}" placeholder="例: 120" required />
+        <input
+          id="daily-time-goal-minutes"
+          type="number"
+          name="minutes"
+          min="1"
+          max="1440"
+          value="{{ daily_time_goal_status.goal_minutes if daily_time_goal_status.configured else '' }}"
+          placeholder="例: 120"
+          required
+        />
         <button type="submit">目標を保存</button>
       </form>
       {% if daily_time_goal_status.configured %}
