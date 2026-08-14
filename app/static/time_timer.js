@@ -35,6 +35,7 @@
 
   let timerState = {
     status: "idle",
+    timerId: null,
     durationMinutes: null,
     remainingSeconds: null,
     endAtMs: null,
@@ -43,6 +44,21 @@
 
   const isValidDuration = (value) =>
     Number.isInteger(value) && value >= MIN_MINUTES && value <= MAX_MINUTES;
+
+  const isValidTimerId = (value) =>
+    typeof value === "string" && value.length >= 1 && value.length <= 100;
+
+  const createTimerId = () => {
+    if (
+      typeof window.crypto === "object" &&
+      window.crypto !== null &&
+      typeof window.crypto.randomUUID === "function"
+    ) {
+      return window.crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
 
   const readDurationInput = () => {
     const rawValue = minutesInput.value.trim();
@@ -78,11 +94,37 @@
     }
   };
 
-  const safeRemoveStoredState = () => {
+  const removeStoredStateIfUnchanged = (expectedRawValue) => {
     try {
-      window.localStorage.removeItem(STORAGE_KEY);
+      if (window.localStorage.getItem(STORAGE_KEY) === expectedRawValue) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
     } catch (_error) {
       // localStorageを利用できない環境でもタイマー自体は継続する。
+    }
+  };
+
+  const removeStoredStateIfOwned = (timerId) => {
+    if (!isValidTimerId(timerId)) {
+      return;
+    }
+
+    try {
+      const rawValue = window.localStorage.getItem(STORAGE_KEY);
+      if (rawValue === null) {
+        return;
+      }
+
+      const parsed = JSON.parse(rawValue);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        parsed.timerId === timerId
+      ) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (_error) {
+      // 別タブの状態か壊れた値か判別できない場合は削除しない。
     }
   };
 
@@ -91,6 +133,7 @@
       return {
         version: STORAGE_VERSION,
         status: "running",
+        timerId: timerState.timerId,
         durationMinutes: timerState.durationMinutes,
         endAtMs: timerState.endAtMs,
       };
@@ -100,6 +143,7 @@
       return {
         version: STORAGE_VERSION,
         status: "paused",
+        timerId: timerState.timerId,
         durationMinutes: timerState.durationMinutes,
         remainingSeconds: timerState.remainingSeconds,
       };
@@ -111,7 +155,6 @@
   const persistState = () => {
     const payload = serializeState();
     if (payload === null) {
-      safeRemoveStoredState();
       return;
     }
 
@@ -162,6 +205,7 @@
   const completeTimer = () => {
     clearTicker();
     const completedMinutes = timerState.durationMinutes;
+    const completedTimerId = timerState.timerId;
 
     if (isValidDuration(completedMinutes)) {
       minutesInput.value = String(completedMinutes);
@@ -169,11 +213,12 @@
 
     timerState = {
       status: "completed",
+      timerId: completedTimerId,
       durationMinutes: completedMinutes,
       remainingSeconds: 0,
       endAtMs: null,
     };
-    safeRemoveStoredState();
+    removeStoredStateIfOwned(completedTimerId);
     render();
     setStatus(
       isValidDuration(completedMinutes)
@@ -210,6 +255,7 @@
 
     timerState = {
       status: "running",
+      timerId: createTimerId(),
       durationMinutes,
       remainingSeconds: durationMinutes * 60,
       endAtMs: Date.now() + durationMinutes * 60 * 1000,
@@ -234,6 +280,7 @@
     clearTicker();
     timerState = {
       status: "paused",
+      timerId: timerState.timerId,
       durationMinutes: timerState.durationMinutes,
       remainingSeconds,
       endAtMs: null,
@@ -246,6 +293,7 @@
   const resumeTimer = () => {
     if (
       timerState.status !== "paused" ||
+      !isValidTimerId(timerState.timerId) ||
       !isValidDuration(timerState.durationMinutes) ||
       !Number.isInteger(timerState.remainingSeconds) ||
       timerState.remainingSeconds <= 0
@@ -255,6 +303,7 @@
 
     timerState = {
       status: "running",
+      timerId: timerState.timerId,
       durationMinutes: timerState.durationMinutes,
       remainingSeconds: timerState.remainingSeconds,
       endAtMs: Date.now() + timerState.remainingSeconds * 1000,
@@ -267,27 +316,32 @@
 
   const resetTimer = () => {
     clearTicker();
+    const resetTimerId = timerState.timerId;
     timerState = {
       status: "idle",
+      timerId: null,
       durationMinutes: null,
       remainingSeconds: null,
       endAtMs: null,
     };
-    safeRemoveStoredState();
+    removeStoredStateIfOwned(resetTimerId);
     render();
     setStatus("タイマーをリセットしました。");
   };
 
   const restoreTimer = () => {
+    let rawValue;
     let parsed;
     try {
-      const rawValue = window.localStorage.getItem(STORAGE_KEY);
+      rawValue = window.localStorage.getItem(STORAGE_KEY);
       if (rawValue === null) {
         return false;
       }
       parsed = JSON.parse(rawValue);
     } catch (_error) {
-      safeRemoveStoredState();
+      if (typeof rawValue === "string") {
+        removeStoredStateIfUnchanged(rawValue);
+      }
       return false;
     }
 
@@ -295,9 +349,10 @@
       typeof parsed !== "object" ||
       parsed === null ||
       parsed.version !== STORAGE_VERSION ||
+      !isValidTimerId(parsed.timerId) ||
       !isValidDuration(parsed.durationMinutes)
     ) {
-      safeRemoveStoredState();
+      removeStoredStateIfUnchanged(rawValue);
       return false;
     }
 
@@ -311,12 +366,13 @@
         parsed.durationMinutes * 60 + RESTORE_TOLERANCE_SECONDS;
 
       if (remainingSeconds > maximumRemainingSeconds) {
-        safeRemoveStoredState();
+        removeStoredStateIfUnchanged(rawValue);
         return false;
       }
 
       timerState = {
         status: "running",
+        timerId: parsed.timerId,
         durationMinutes: parsed.durationMinutes,
         remainingSeconds: null,
         endAtMs: parsed.endAtMs,
@@ -340,6 +396,7 @@
     ) {
       timerState = {
         status: "paused",
+        timerId: parsed.timerId,
         durationMinutes: parsed.durationMinutes,
         remainingSeconds: parsed.remainingSeconds,
         endAtMs: null,
@@ -349,7 +406,7 @@
       return true;
     }
 
-    safeRemoveStoredState();
+    removeStoredStateIfUnchanged(rawValue);
     return false;
   };
 
@@ -371,6 +428,7 @@
       minutesInput.value = String(presetMinutes);
       timerState = {
         status: "idle",
+        timerId: null,
         durationMinutes: null,
         remainingSeconds: null,
         endAtMs: null,
@@ -384,6 +442,7 @@
     if (timerState.status === "idle" || timerState.status === "completed") {
       timerState = {
         status: "idle",
+        timerId: null,
         durationMinutes: null,
         remainingSeconds: null,
         endAtMs: null,
