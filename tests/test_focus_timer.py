@@ -70,6 +70,18 @@ def test_focus_timer_assets_are_served_and_do_not_post_time_entries(client: Test
     assert ".focus-timer-panel" in stylesheet.text
 
 
+def test_running_timer_restore_rejects_remaining_time_beyond_saved_duration(
+    client: TestClient,
+):
+    script = client.get("/static/time_timer.js")
+
+    assert script.status_code == 200
+    assert "RESTORE_TOLERANCE_SECONDS = 1" in script.text
+    assert "parsed.durationMinutes * 60 + RESTORE_TOLERANCE_SECONDS" in script.text
+    assert "remainingSeconds > maximumRemainingSeconds" in script.text
+    assert "safeRemoveStoredState();" in script.text
+
+
 def test_focus_timer_is_available_when_hidden_time_card_is_temporarily_shown(
     client: TestClient,
 ):
