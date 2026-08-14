@@ -128,6 +128,28 @@
     }
   };
 
+  const storedStateIsOwnedBy = (timerId) => {
+    if (!isValidTimerId(timerId)) {
+      return false;
+    }
+
+    try {
+      const rawValue = window.localStorage.getItem(STORAGE_KEY);
+      if (rawValue === null) {
+        return false;
+      }
+
+      const parsed = JSON.parse(rawValue);
+      return (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        parsed.timerId === timerId
+      );
+    } catch (_error) {
+      return false;
+    }
+  };
+
   const serializeState = () => {
     if (timerState.status === "running") {
       return {
@@ -152,25 +174,50 @@
     return null;
   };
 
-  const persistState = () => {
+  const persistState = ({ allowReplace = false } = {}) => {
     const payload = serializeState();
-    if (payload === null) {
-      return;
+    if (payload === null || !isValidTimerId(payload.timerId)) {
+      return false;
     }
 
     try {
+      if (!allowReplace && !storedStateIsOwnedBy(payload.timerId)) {
+        return false;
+      }
+
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      return true;
     } catch (_error) {
       // 保存できなくても現在ページ内のタイマー動作は継続する。
+      return false;
     }
   };
 
   const remainingSecondsForRunningState = () => {
-    if (timerState.status !== "running" || typeof timerState.endAtMs !== "number") {
+    if (
+      timerState.status !== "running" ||
+      typeof timerState.endAtMs !== "number" ||
+      !isValidDuration(timerState.durationMinutes)
+    ) {
       return 0;
     }
 
-    return Math.max(0, Math.ceil((timerState.endAtMs - Date.now()) / 1000));
+    const calculatedSeconds = Math.max(
+      0,
+      Math.ceil((timerState.endAtMs - Date.now()) / 1000)
+    );
+    const maximumSeconds = timerState.durationMinutes * 60;
+    const previousSeconds = Number.isInteger(timerState.remainingSeconds)
+      ? timerState.remainingSeconds
+      : maximumSeconds;
+    const boundedSeconds = Math.min(
+      calculatedSeconds,
+      maximumSeconds,
+      previousSeconds
+    );
+
+    timerState.remainingSeconds = boundedSeconds;
+    return boundedSeconds;
   };
 
   const render = () => {
@@ -260,7 +307,7 @@
       remainingSeconds: durationMinutes * 60,
       endAtMs: Date.now() + durationMinutes * 60 * 1000,
     };
-    persistState();
+    persistState({ allowReplace: true });
     render();
     setStatus(`${durationMinutes}分のタイマーを開始しました。`);
     startTicker();
@@ -285,9 +332,13 @@
       remainingSeconds,
       endAtMs: null,
     };
-    persistState();
+    const persisted = persistState();
     render();
-    setStatus("タイマーを一時停止しました。");
+    setStatus(
+      persisted
+        ? "タイマーを一時停止しました。"
+        : "タイマーを一時停止しました。別タブの新しいタイマー状態は変更していません。"
+    );
   };
 
   const resumeTimer = () => {
@@ -308,9 +359,13 @@
       remainingSeconds: timerState.remainingSeconds,
       endAtMs: Date.now() + timerState.remainingSeconds * 1000,
     };
-    persistState();
+    const persisted = persistState();
     render();
-    setStatus("タイマーを再開しました。");
+    setStatus(
+      persisted
+        ? "タイマーを再開しました。"
+        : "タイマーを再開しました。別タブの新しいタイマー状態は変更していません。"
+    );
     startTicker();
   };
 
@@ -374,7 +429,10 @@
         status: "running",
         timerId: parsed.timerId,
         durationMinutes: parsed.durationMinutes,
-        remainingSeconds: null,
+        remainingSeconds: Math.min(
+          Math.max(remainingSeconds, 0),
+          parsed.durationMinutes * 60
+        ),
         endAtMs: parsed.endAtMs,
       };
 
