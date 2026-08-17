@@ -72,6 +72,94 @@
     </div>
   </section>
 
+  {% if time_insights %}
+  {% set insight_total_hours = time_insights.total_minutes // 60 %}
+  {% set insight_total_remainder = time_insights.total_minutes % 60 %}
+  {% set insight_average_hours = time_insights.average_minutes // 60 %}
+  {% set insight_average_remainder = time_insights.average_minutes % 60 %}
+  <section class="time-insights-panel" aria-labelledby="time-insights-heading">
+    <div class="time-insights-heading">
+      <div>
+        <h3 id="time-insights-heading">直近7日の時間インサイト</h3>
+        <p class="hint">
+          {{ time_insights.period_start.strftime('%m/%d') }}〜{{ time_insights.period_end.strftime('%m/%d') }} の記録をまとめています。
+        </p>
+      </div>
+      <a href="/weekly">週次集計を見る</a>
+    </div>
+
+    <div class="time-insights-metrics" aria-label="直近7日の時間記録概要">
+      <div class="time-insight-metric">
+        <span>7日合計</span>
+        <strong>{% if insight_total_hours > 0 %}{{ insight_total_hours }}時間{% endif %}{{ insight_total_remainder }}分</strong>
+        <small>{{ time_insights.active_days }}日で記録</small>
+      </div>
+      <div class="time-insight-metric">
+        <span>活動日</span>
+        <strong>{{ time_insights.active_days }}/7日</strong>
+        <small>1分以上を活動日として集計</small>
+      </div>
+      <div class="time-insight-metric">
+        <span>活動日平均</span>
+        <strong>{% if insight_average_hours > 0 %}{{ insight_average_hours }}時間{% endif %}{{ insight_average_remainder }}分</strong>
+        <small>記録がある日の平均</small>
+      </div>
+      <div class="time-insight-metric">
+        <span>連続記録</span>
+        <strong>{{ time_insights.streak_days }}日</strong>
+        {% if time_insights.today_recorded %}
+        <small>今日も記録済み</small>
+        {% elif time_insights.streak_days > 0 %}
+        <small>今日はまだ未記録</small>
+        {% else %}
+        <small>今日から始められます</small>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if time_insights.has_activity %}
+    <div class="time-insights-summary" aria-label="時間記録の比較とカテゴリ概要">
+      <span>
+        {% if time_insights.previous_total_minutes == 0 %}
+          {% if time_insights.total_minutes > 0 %}
+          前7日は0分・今期は<strong>{{ time_insights.total_minutes }}分</strong>
+          {% else %}
+          前7日も記録なし
+          {% endif %}
+        {% elif time_insights.change_percentage > 0 %}
+        前7日比 <strong>+{{ time_insights.change_percentage }}%</strong>
+        {% elif time_insights.change_percentage < 0 %}
+        前7日比 <strong>{{ time_insights.change_percentage }}%</strong>
+        {% else %}
+        前7日比 <strong>±0%</strong>
+        {% endif %}
+      </span>
+      {% if time_insights.top_category %}
+      <span>最多カテゴリ <strong>{{ time_insights.top_category }} {{ time_insights.top_category_minutes }}分</strong></span>
+      {% endif %}
+    </div>
+
+    <ul class="time-insights-days" aria-label="直近7日の日別記録時間">
+      {% for day in time_insights.days %}
+      <li class="time-insights-day {% if day.is_today %}is-today{% endif %}">
+        <span class="time-insights-day-label">
+          {{ day.target_date.strftime('%m/%d') }}（{{ day.weekday }}）{% if day.is_today %} 今日{% endif %}
+        </span>
+        <progress
+          value="{{ day.percentage }}"
+          max="100"
+          aria-label="{{ day.target_date.isoformat() }}の記録時間 {{ day.minutes }}分"
+        >{{ day.percentage }}%</progress>
+        <strong>{{ day.minutes }}分</strong>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="time-insights-empty">直近7日にはまだ時間記録がありません。タイマーや記録フォームから最初の1件を追加すると、推移を確認できます。</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if category_totals %}
   <h3>カテゴリ別合計</h3>
   <ul class="list history-entry-list" aria-label="当日のカテゴリ別合計">
