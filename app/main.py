@@ -36,6 +36,7 @@ from app.time_goal import (
     load_daily_time_goal,
     save_daily_time_goal,
 )
+from app.time_insights import build_time_insights
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -87,8 +88,27 @@ def render_dashboard(
         load_daily_time_goal(db),
         total_minutes,
     )
-    habit_items, habit_completed_today, habit_total = habit_crud.get_dashboard_summary(db, today)
     dashboard_preferences = get_dashboard_preferences(db)
+    time_insights = None
+    if (
+        "time" not in dashboard_preferences.hidden
+        or request.query_params.get("show_card") == "time"
+    ):
+        comparison_start = today - timedelta(days=13)
+        period_start = today - timedelta(days=6)
+        time_insights = build_time_insights(
+            today=today,
+            daily_totals=dict(
+                time_entry_crud.get_daily_totals_between(db, comparison_start, today)
+            ),
+            recorded_dates=time_entry_crud.list_recorded_dates_up_to(db, today),
+            category_totals=time_entry_crud.get_category_totals_between(
+                db,
+                period_start,
+                today,
+            ),
+        )
+    habit_items, habit_completed_today, habit_total = habit_crud.get_dashboard_summary(db, today)
     dashboard_preferences_payload = dashboard_preferences.to_dict()
     dashboard_preferences_payload["persisted"] = dashboard_preferences.persisted
 
@@ -104,6 +124,7 @@ def render_dashboard(
             "category_totals": category_totals,
             "time_entry_categories": TIME_ENTRY_CATEGORIES,
             "daily_time_goal_status": daily_time_goal_status,
+            "time_insights": time_insights,
             "habit_items": habit_items,
             "habit_completed_today": habit_completed_today,
             "habit_total": habit_total,
