@@ -85,6 +85,29 @@
     {% endfor %}
   </ul>
   {% endif %}
+
+  <section class="focus-timer-panel" data-focus-timer aria-labelledby="focus-timer-heading">
+    <div class="focus-timer-heading">
+      <div>
+        <h3 id="focus-timer-heading">フォーカスタイマー</h3>
+        <p class="hint">記録フォームの分数を使って計測します。完了しても自動登録せず、内容を確認してから追加できます。</p>
+      </div>
+      <output class="focus-timer-display" data-timer-display role="timer" aria-label="フォーカスタイマーの残り時間">--:--</output>
+    </div>
+    <div class="focus-timer-presets" role="group" aria-label="タイマー時間のクイック設定">
+      {% for preset_minutes in (15, 25, 50, 90) %}
+      <button type="button" class="secondary-button" data-timer-preset="{{ preset_minutes }}" aria-controls="time-minutes">{{ preset_minutes }}分</button>
+      {% endfor %}
+    </div>
+    <div class="focus-timer-actions">
+      <button type="button" data-timer-start aria-controls="time-minutes">開始</button>
+      <button type="button" data-timer-pause hidden>一時停止</button>
+      <button type="button" data-timer-resume hidden>再開</button>
+      <button type="button" class="secondary-button" data-timer-reset hidden>リセット</button>
+    </div>
+    <p class="focus-timer-status" data-timer-status aria-live="polite">分数を入力するかプリセットを選んで開始してください。</p>
+  </section>
+
   <form action="/time-entries{% if preserve_time_card %}?show_card=time{% endif %}" method="post" class="inline-form">
     <label for="time-category" class="sr-only">カテゴリ</label>
     <select id="time-category" name="category" class="secondary-button" required>

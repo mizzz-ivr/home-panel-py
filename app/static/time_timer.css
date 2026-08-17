@@ -1,0 +1,71 @@
+.focus-timer-panel {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem;
+  border: 1px solid #d9dde5;
+  border-radius: 0.8rem;
+  background: #f8fafc;
+}
+
+.focus-timer-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.focus-timer-heading h3 {
+  margin: 0 0 0.25rem;
+}
+
+.focus-timer-display {
+  min-width: 7.5rem;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1;
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+.focus-timer-presets,
+.focus-timer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.focus-timer-presets {
+  margin-top: 0.9rem;
+}
+
+.focus-timer-actions {
+  margin-top: 0.75rem;
+}
+
+.focus-timer-status {
+  margin: 0.75rem 0 0;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.focus-timer-status-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .focus-timer-heading {
+    flex-direction: column;
+  }
+
+  .focus-timer-display {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .focus-timer-presets button,
+  .focus-timer-actions button {
+    flex: 1 1 8rem;
+  }
+}
