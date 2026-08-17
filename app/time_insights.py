@@ -66,7 +66,7 @@ def build_time_insights(
 ) -> TimeInsights:
     period_start = today - timedelta(days=CURRENT_PERIOD_DAYS - 1)
     comparison_start = period_start - timedelta(days=COMPARISON_PERIOD_DAYS)
-    comparison_end = period_start - timedelta(days=1)
+    recorded_date_values = tuple(recorded_dates)
 
     current_dates = [period_start + timedelta(days=offset) for offset in range(CURRENT_PERIOD_DAYS)]
     current_minutes = [max(int(daily_totals.get(target_date, 0)), 0) for target_date in current_dates]
@@ -119,8 +119,8 @@ def build_time_insights(
         total_minutes=total_minutes,
         active_days=active_days,
         average_minutes=average_minutes,
-        streak_days=calculate_recording_streak(recorded_dates, today),
-        today_recorded=today in set(recorded_dates),
+        streak_days=calculate_recording_streak(recorded_date_values, today),
+        today_recorded=today in set(recorded_date_values),
         previous_total_minutes=previous_total_minutes,
         change_percentage=change_percentage,
         trend=trend,
