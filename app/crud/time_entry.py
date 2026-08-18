@@ -40,6 +40,16 @@ def list_entries_between(
     return list(db.scalars(stmt).all())
 
 
+def list_recorded_dates_up_to(db: Session, end_date: date) -> list[date]:
+    stmt = (
+        select(TimeEntry.entry_date)
+        .where(TimeEntry.entry_date <= end_date)
+        .distinct()
+        .order_by(TimeEntry.entry_date.desc())
+    )
+    return list(db.scalars(stmt).all())
+
+
 def get_total_minutes_by_date(db: Session, target_date: date) -> int:
     stmt = select(func.coalesce(func.sum(TimeEntry.minutes), 0)).where(
         TimeEntry.entry_date == target_date
