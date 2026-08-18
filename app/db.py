@@ -5,6 +5,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.migrations import migrate_home_panel_schema
+from app.time_goal_migration import migrate_daily_time_goal_periods
 
 DATABASE_URL = "sqlite:///./home_panel.db"
 
@@ -24,6 +25,7 @@ class HomePanelMetaData(MetaData):
         checkfirst: bool = True,
     ) -> None:
         migrate_home_panel_schema(bind)
+        migrate_daily_time_goal_periods(bind)
         super().create_all(bind=bind, tables=tables, checkfirst=checkfirst)
 
 
