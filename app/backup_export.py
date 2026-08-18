@@ -20,10 +20,17 @@ from app.models.habit import Habit, HabitActivePeriod, HabitCompletion, HabitSch
 from app.models.memo import DailyMemo
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
+from app.models.time_goal import DailyTimeGoalPeriod
+from app.time_goal_migration import migrate_daily_time_goal_periods
 
-BACKUP_SCHEMA_VERSION = 6
+BACKUP_SCHEMA_VERSION = 7
 BASE_REQUIRED_TABLES = {"tasks", "daily_memos", "time_entries", "habits", "habit_completions"}
-REQUIRED_TABLES = {*BASE_REQUIRED_TABLES, "habit_active_periods", "habit_schedule_periods"}
+REQUIRED_TABLES = {
+    *BASE_REQUIRED_TABLES,
+    "habit_active_periods",
+    "habit_schedule_periods",
+    "daily_time_goal_periods",
+}
 
 
 def format_datetime(value: datetime) -> str:
@@ -43,6 +50,14 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
     tasks = list(db.scalars(select(Task).order_by(Task.id.asc())).all())
     memos = list(db.scalars(select(DailyMemo).order_by(DailyMemo.memo_date.asc(), DailyMemo.id.asc())).all())
     entries = list(db.scalars(select(TimeEntry).order_by(TimeEntry.entry_date.asc(), TimeEntry.created_at.asc(), TimeEntry.id.asc())).all())
+    goal_periods = list(
+        db.scalars(
+            select(DailyTimeGoalPeriod).order_by(
+                DailyTimeGoalPeriod.started_on.asc(),
+                DailyTimeGoalPeriod.id.asc(),
+            )
+        ).all()
+    )
     habits = list(db.scalars(select(Habit).order_by(Habit.created_at.asc(), Habit.id.asc())).all())
     active_periods = list(db.scalars(select(HabitActivePeriod).order_by(HabitActivePeriod.habit_id.asc(), HabitActivePeriod.started_on.asc(), HabitActivePeriod.id.asc())).all())
     schedule_periods = list(db.scalars(select(HabitSchedulePeriod).order_by(HabitSchedulePeriod.habit_id.asc(), HabitSchedulePeriod.started_on.asc(), HabitSchedulePeriod.id.asc())).all())
@@ -72,6 +87,13 @@ def build_backup_payload(db: Session, exported_at: datetime | None = None) -> di
             "note": entry.note,
             "created_at": format_datetime(entry.created_at),
         } for entry in entries],
+        "daily_time_goal_periods": [{
+            "id": period.id,
+            "goal_minutes": period.goal_minutes,
+            "started_on": period.started_on.isoformat(),
+            "ended_on": period.ended_on.isoformat() if period.ended_on else None,
+            "created_at": format_datetime(period.created_at),
+        } for period in goal_periods],
         "habits": [{
             "id": habit.id,
             "name": habit.name,
@@ -163,6 +185,7 @@ def run_cli(args: Sequence[str] | None = None) -> int:
         missing_base_tables = BASE_REQUIRED_TABLES - table_names
         if not missing_base_tables:
             migrate_home_panel_schema(engine)
+            migrate_daily_time_goal_periods(engine)
         missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
     except SQLAlchemyError as exc:
         print(f"バックアップ対象のDBを確認できません: {exc}", file=sys.stderr)
