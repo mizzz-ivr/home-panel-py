@@ -100,6 +100,75 @@ def test_completed_past_due_task_is_not_rendered_as_overdue(client: TestClient):
     assert "due-today" not in class_names
 
 
+def test_backup_v6_preserves_task_metadata_and_validates(client: TestClient):
+    client.post(
+        "/tasks/advanced",
+        data={"title": "バックアップ対象", "due_date": "2026-08-31", "priority": "low"},
+    )
+    exported_at = datetime(2026, 8, 6, 1, 0, tzinfo=timezone.utc)
+    with client.app.state.testing_session_factory() as db:
+        payload = build_backup_payload(db, exported_at=exported_at)
+
+    payload["schema_version"] = 6
+    payload["record_counts"].pop("daily_time_goal_periods")
+    payload["data"].pop("daily_time_goal_periods")
+
+    assert payload["schema_version"] == 6
+    assert payload["data"]["tasks"][0]["due_date"] == "2026-08-31"
+    assert payload["data"]["tasks"][0]["priority"] == "low"
+    assert validate_backup_payload(payload) == []
+
+    invalid_priority = payload | {
+        "data": payload["data"] | {
+            "tasks": [payload["data"]["tasks"][0] | {"priority": "urgent"}]
+        }
+    }
+    assert any("priority" in error for error in validate_backup_payload(invalid_priority))
+
+
+def test_v5_backup_is_normalized_with_task_defaults():
+    payload = {
+        "schema_version": 5,
+        "application": "home-panel-py",
+        "exported_at": "2026-08-06T01:00:00Z",
+        "record_counts": {
+            "tasks": 1,
+            "daily_memos": 0,
+            "time_entries": 0,
+            "habits": 0,
+            "habit_active_periods": 0,
+            "habit_schedule_periods": 0,
+            "habit_completions": 0,
+        },
+        "data": {
+            "tasks": [
+                {
+                    "id": 1,
+                    "title": "旧バックアップ",
+                    "is_done": False,
+                    "created_at": "2026-08-01T00:00:00Z",
+                    "updated_at": "2026-08-01T00:00:00Z",
+                }
+            ],
+            "daily_memos": [],
+            "time_entries": [],
+            "habits": [],
+            "habit_active_periods": [],
+            "habit_schedule_periods": [],
+            "habit_completions": [],
+        },
+    }
+
+    assert validate_backup_payload(payload) == []
+    normalized = normalize_backup_payload(payload)
+    task = normalized["data"]["tasks"][0]
+    assert normalized["schema_version"] == 7
+    assert normalized["data"]["daily_time_goal_periods"] == []
+    assert task["due_date"] is None
+    assert task["priority"] == "medium"
+    assert validate_backup_payload(normalized) == []
+
+
 def test_backup_v6_restore_preserves_task_due_date_and_priority(
     client: TestClient,
     tmp_path: Path,
@@ -118,6 +187,10 @@ def test_backup_v6_restore_preserves_task_due_date_and_priority(
             db,
             exported_at=datetime(2026, 8, 6, 1, 0, tzinfo=timezone.utc),
         )
+
+    payload["schema_version"] = 6
+    payload["record_counts"].pop("daily_time_goal_periods")
+    payload["data"].pop("daily_time_goal_periods")
 
     backup_path = tmp_path / "todo-v6.json"
     backup_path.write_text(
