@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .backup_export_legacy_tests import *  # noqa: F401,F403
+from app.models.time_goal import DailyTimeGoalPeriod
 
 
 def test_build_backup_payload_contains_all_tables_and_counts(session):
@@ -28,6 +29,13 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
             category="個人開発",
             minutes=90,
             note="API実装",
+            created_at=created_at,
+        )
+    )
+    session.add(
+        DailyTimeGoalPeriod(
+            goal_minutes=120,
+            started_on=date(2026, 7, 20),
             created_at=created_at,
         )
     )
@@ -69,12 +77,13 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
         exported_at=datetime(2026, 7, 24, 4, 5, 6, tzinfo=timezone.utc),
     )
 
-    assert payload["schema_version"] == 6
+    assert payload["schema_version"] == 7
     assert payload["application"] == "home-panel-py"
     assert payload["record_counts"] == {
         "tasks": 1,
         "daily_memos": 1,
         "time_entries": 1,
+        "daily_time_goal_periods": 1,
         "habits": 1,
         "habit_active_periods": 1,
         "habit_schedule_periods": 1,
@@ -83,7 +92,32 @@ def test_build_backup_payload_contains_all_tables_and_counts(session):
     task_record = payload["data"]["tasks"][0]
     assert task_record["due_date"] == "2026-07-25"
     assert task_record["priority"] == "high"
+    assert payload["data"]["daily_time_goal_periods"] == [
+        {
+            "id": 1,
+            "goal_minutes": 120,
+            "started_on": "2026-07-20",
+            "ended_on": None,
+            "created_at": "2026-07-24T01:02:03Z",
+        }
+    ]
     assert payload["data"]["habit_schedule_periods"][0]["weekdays"] == [0, 1, 2, 3, 4]
+
+
+def test_build_backup_payload_handles_empty_database(session):
+    payload = build_backup_payload(session)
+
+    assert payload["record_counts"] == {
+        "tasks": 0,
+        "daily_memos": 0,
+        "time_entries": 0,
+        "daily_time_goal_periods": 0,
+        "habits": 0,
+        "habit_active_periods": 0,
+        "habit_schedule_periods": 0,
+        "habit_completions": 0,
+    }
+    assert payload["data"]["daily_time_goal_periods"] == []
 
 
 def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
@@ -92,7 +126,7 @@ def test_write_backup_file_overwrites_with_force(session, tmp_path: Path):
 
     write_backup_file(session, output, overwrite=True)
 
-    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 6
+    assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == 7
 
 
 def test_run_cli_migrates_legacy_habits_before_export(tmp_path: Path):
@@ -111,9 +145,10 @@ def test_run_cli_migrates_legacy_habits_before_export(tmp_path: Path):
 
     assert run_cli(["--database", str(database), "--output", str(output)]) == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 6
+    assert payload["schema_version"] == 7
     assert payload["data"]["tasks"][0]["due_date"] is None
     assert payload["data"]["tasks"][0]["priority"] == "medium"
+    assert payload["data"]["daily_time_goal_periods"] == []
     assert payload["data"]["habits"][0]["archived_at"] == "2026-07-10T00:00:00Z"
     assert payload["data"]["habit_active_periods"][0]["ended_on"] == "2026-07-10"
     assert payload["data"]["habit_schedule_periods"][0]["weekdays"] == list(range(7))
