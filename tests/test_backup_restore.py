@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from datetime import date
+
 from .backup_restore_legacy_tests import *  # noqa: F401,F403
 from app.models.time_goal import DailyTimeGoalPeriod
 from app.time_goal_constants import DAILY_TIME_GOAL_KEY
