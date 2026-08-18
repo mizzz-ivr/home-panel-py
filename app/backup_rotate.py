@@ -25,7 +25,8 @@ from app.backup_validate import (
     load_backup_file,
     validate_backup_payload,
 )
-from app.migrations import migrate_habit_schema
+from app.migrations import migrate_home_panel_schema
+from app.time_goal_migration import migrate_daily_time_goal_periods
 
 DEFAULT_BACKUP_DIRECTORY = Path.home() / "HomePanelBackups"
 DEFAULT_KEEP_COUNT = 30
@@ -189,7 +190,8 @@ def validate_database_for_backup(engine: Engine) -> None:
             + ", ".join(sorted(missing_base_tables))
         )
 
-    migrate_habit_schema(engine)
+    migrate_home_panel_schema(engine)
+    migrate_daily_time_goal_periods(engine)
     missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
     if missing_tables:
         raise BackupRotationInputError(
@@ -221,6 +223,7 @@ def inspect_managed_backup(path: Path) -> tuple[ManagedBackup | None, SkippedBac
         )
     if metadata is None:
         return None, None
+    filename_time, sequence = metadata
     if path.is_symlink():
         return None, SkippedBackup(path, "シンボリックリンクのため自動管理しません。")
     if not path.is_file():
@@ -228,27 +231,23 @@ def inspect_managed_backup(path: Path) -> tuple[ManagedBackup | None, SkippedBac
 
     try:
         payload, digest = load_backup_file(path)
-        errors = validate_backup_payload(payload)
     except (BackupInputError, OSError) as exc:
-        return None, SkippedBackup(path, f"検証できません: {exc}")
-
+        return None, SkippedBackup(path, f"検証可能なJSONではありません: {exc}")
+    errors = validate_backup_payload(payload)
     if errors:
         return None, SkippedBackup(
             path,
-            f"バックアップ検証エラーが{len(errors)}件あります: {errors[0]}",
+            "Home Panelバックアップとして検証できません: " + errors[0],
         )
-
-    filename_time, sequence = metadata
     exported_at = parse_backup_datetime(payload["exported_at"])
     if exported_at.replace(microsecond=0) != filename_time:
         return None, SkippedBackup(
             path,
-            "ファイル名のUTC時刻とJSONのexported_atが一致しません。",
+            "ファイル名のUTC日時とexported_atが一致しません。",
         )
-
     return (
         ManagedBackup(
-            path=path.resolve(),
+            path=path,
             exported_at=exported_at,
             sequence=sequence,
             sha256=digest,
@@ -257,137 +256,44 @@ def inspect_managed_backup(path: Path) -> tuple[ManagedBackup | None, SkippedBac
     )
 
 
-def create_verified_backup(
-    database_path: Path,
-    backup_directory: Path,
-    *,
-    exported_at: datetime | None = None,
-) -> ManagedBackup:
-    source = database_path.expanduser().resolve()
-    if not source.is_file():
-        raise BackupRotationInputError(
-            f"バックアップ対象のDBが見つかりません: {source}"
-        )
-
-    export_time = (exported_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    output_path = next_backup_path(backup_directory, export_time)
-    if output_path.resolve() == source:
-        raise BackupRotationInputError(
-            "バックアップ対象のDB本体を出力先には指定できません。"
-        )
-
-    engine = create_sqlite_engine(source)
-    try:
-        validate_database_for_backup(engine)
-        session_factory = sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=engine,
-        )
-        with session_factory() as db:
-            destination = write_backup_file(
-                db,
-                output_path,
-                exported_at=export_time,
-            )
-    finally:
-        engine.dispose()
-
-    managed, skipped = inspect_managed_backup(destination)
-    if managed is None:
-        cleanup_error: OSError | None = None
-        try:
-            destination.unlink(missing_ok=True)
-        except OSError as exc:
-            cleanup_error = exc
-        reason = skipped.reason if skipped is not None else "命名規則を確認できません。"
-        if cleanup_error is not None:
-            reason += f" 検証失敗ファイルの削除にも失敗しました: {cleanup_error}"
-        raise BackupRotationRuntimeError(
-            f"作成したバックアップの検証に失敗しました: {reason}"
-        )
-    return managed
-
-
-def collect_managed_backups(
-    directory: Path,
-) -> tuple[list[ManagedBackup], list[SkippedBackup]]:
+def collect_managed_backups(directory: Path) -> tuple[list[ManagedBackup], list[SkippedBackup]]:
     managed: list[ManagedBackup] = []
     skipped: list[SkippedBackup] = []
     for path in directory.iterdir():
-        if BACKUP_FILENAME_PATTERN.fullmatch(path.name) is None:
-            continue
-        inspected, warning = inspect_managed_backup(path)
-        if inspected is not None:
-            managed.append(inspected)
-        elif warning is not None:
-            skipped.append(warning)
-    managed.sort(
-        key=lambda item: (
-            item.exported_at,
-            item.sequence,
-            item.path.name,
-        )
-    )
+        result, ignored = inspect_managed_backup(path)
+        if result is not None:
+            managed.append(result)
+        elif ignored is not None:
+            skipped.append(ignored)
+    managed.sort(key=lambda item: (item.exported_at, item.sequence, item.path.name))
     skipped.sort(key=lambda item: item.path.name)
     return managed, skipped
 
 
-def prune_managed_backups(
-    directory: Path,
-    *,
-    keep_count: int,
-    protected_path: Path,
-) -> RetentionResult:
-    validate_keep_count(keep_count)
-    managed, skipped = collect_managed_backups(directory)
-    protected = protected_path.resolve()
-    if not any(item.path == protected for item in managed):
-        warning = next(
-            (item for item in skipped if item.path.resolve() == protected),
-            SkippedBackup(
-                protected,
-                "今回作成したバックアップを再検証できません。",
-            ),
-        )
-        return RetentionResult(
-            deleted=(),
-            skipped=tuple(sorted(skipped, key=lambda item: item.path.name)),
-            failed=(warning,),
-        )
+def current_sha256(path: Path) -> str:
+    _, digest = load_backup_file(path)
+    return digest
 
-    candidates = managed[:-keep_count] if len(managed) > keep_count else []
+
+def apply_retention(directory: Path, keep_count: int) -> RetentionResult:
+    managed, skipped = collect_managed_backups(directory)
+    delete_count = max(len(managed) - keep_count, 0)
     deleted: list[Path] = []
     failed: list[SkippedBackup] = []
-    for candidate in candidates:
-        if candidate.path == protected:
-            skipped.append(
-                SkippedBackup(
-                    candidate.path,
-                    "今回作成したバックアップのため保持します。",
-                )
-            )
-            continue
-
-        current, warning = inspect_managed_backup(candidate.path)
-        if current is None or current.sha256 != candidate.sha256:
-            failed.append(
-                warning
-                or SkippedBackup(
-                    candidate.path,
-                    "検証後に内容が変更されたため削除しません。",
-                )
-            )
-            continue
+    for item in managed[:delete_count]:
         try:
-            candidate.path.unlink()
-        except OSError as exc:
-            failed.append(
-                SkippedBackup(candidate.path, f"削除に失敗しました: {exc}")
-            )
-        else:
-            deleted.append(candidate.path)
-
+            if current_sha256(item.path) != item.sha256:
+                skipped.append(
+                    SkippedBackup(
+                        item.path,
+                        "削除候補選定後に内容が変更されたため保持します。",
+                    )
+                )
+                continue
+            item.path.unlink()
+            deleted.append(item.path)
+        except (BackupInputError, OSError) as exc:
+            failed.append(SkippedBackup(item.path, str(exc)))
     return RetentionResult(
         deleted=tuple(deleted),
         skipped=tuple(sorted(skipped, key=lambda item: item.path.name)),
@@ -398,32 +304,45 @@ def prune_managed_backups(
 def run_backup_rotation(
     database_path: Path,
     backup_directory: Path,
+    keep_count: int,
     *,
-    keep_count: int = DEFAULT_KEEP_COUNT,
     exported_at: datetime | None = None,
 ) -> BackupRotationResult:
     validate_keep_count(keep_count)
+    database = database_path.expanduser().resolve()
+    if database.is_symlink() or not database.is_file():
+        raise BackupRotationInputError(
+            f"バックアップ対象のDBが見つかりません: {database}"
+        )
     directory = prepare_backup_directory(backup_directory)
-    with backup_directory_lock(directory, acquired_at=exported_at):
-        created = create_verified_backup(
-            database_path,
-            directory,
-            exported_at=exported_at,
-        )
-        retention = prune_managed_backups(
-            directory,
-            keep_count=keep_count,
-            protected_path=created.path,
-        )
-    return BackupRotationResult(created=created, retention=retention)
+    engine = create_sqlite_engine(database)
+    try:
+        validate_database_for_backup(engine)
+        session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        created_at = exported_at or datetime.now(timezone.utc)
+        destination = next_backup_path(directory, created_at)
+        with backup_directory_lock(directory, acquired_at=created_at):
+            with session_factory() as db:
+                write_backup_file(db, destination, exported_at=created_at)
+            created, skipped = inspect_managed_backup(destination)
+            if created is None:
+                destination.unlink(missing_ok=True)
+                reason = skipped.reason if skipped is not None else "作成後の検証に失敗しました。"
+                raise BackupRotationRuntimeError(reason)
+            retention = apply_retention(directory, keep_count)
+            if retention.failed:
+                raise BackupRotationRuntimeError(
+                    "旧バックアップの削除に失敗しました: "
+                    + retention.failed[0].reason
+                )
+            return BackupRotationResult(created=created, retention=retention)
+    finally:
+        engine.dispose()
 
 
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "Home PanelのJSONバックアップを作成・検証し、"
-            "検証済みファイルを指定世代数まで整理します。"
-        )
+        description="検証済みJSONバックアップを作成し、古い世代を安全に整理します。"
     )
     parser.add_argument(
         "--database",
@@ -435,53 +354,38 @@ def create_parser() -> argparse.ArgumentParser:
         "--backup-dir",
         type=Path,
         default=DEFAULT_BACKUP_DIRECTORY,
-        help=(
-            "バックアップ保存先ディレクトリ"
-            "（既定: ~/HomePanelBackups）"
-        ),
+        help="バックアップ保存先（既定: ~/HomePanelBackups）",
     )
     parser.add_argument(
         "--keep",
         type=int,
         default=DEFAULT_KEEP_COUNT,
-        help=f"保持する検証済みバックアップ数（既定: {DEFAULT_KEEP_COUNT}）",
+        help=f"検証済みバックアップの保持数（1〜{MAX_KEEP_COUNT}、既定: {DEFAULT_KEEP_COUNT}）",
     )
-    return parser
-
-
-def run_cli(args: Sequence[str] | None = None) -> int:
-    options = create_parser().parse_args(args)
+    options = parser.parse_args(args)
     try:
         result = run_backup_rotation(
             options.database,
             options.backup_dir,
-            keep_count=options.keep,
+            options.keep,
         )
-    except (BackupRotationInputError, BackupInputError) as exc:
-        print(f"バックアップを実行できません: {exc}", file=sys.stderr)
+    except BackupRotationInputError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
     except (BackupRotationRuntimeError, OSError, SQLAlchemyError) as exc:
         print(f"バックアップ処理に失敗しました: {exc}", file=sys.stderr)
         return 1
 
     print(f"バックアップを作成しました: {result.created.path}")
-    print(f"SHA-256: {result.created.sha256}")
-    print(f"削除した旧バックアップ: {len(result.retention.deleted)}件")
-    for deleted in result.retention.deleted:
-        print(f"- 削除: {deleted}")
-    for warning in result.retention.skipped:
-        print(
-            f"警告: 自動管理しないファイル: {warning.path} ({warning.reason})",
-            file=sys.stderr,
-        )
-    for failure in result.retention.failed:
-        print(
-            f"警告: 世代整理を完了できませんでした: "
-            f"{failure.path} ({failure.reason})",
-            file=sys.stderr,
-        )
-
-    return 1 if result.retention.failed else 0
+    if result.retention.deleted:
+        print("削除した旧バックアップ:")
+        for path in result.retention.deleted:
+            print(f"- {path}")
+    if result.retention.skipped:
+        print("自動管理しなかったファイル:")
+        for item in result.retention.skipped:
+            print(f"- {item.path}: {item.reason}")
+    return 0
 
 
 if __name__ == "__main__":
