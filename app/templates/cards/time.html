@@ -117,6 +117,39 @@
       </div>
     </div>
 
+    {% if time_goal_achievement_insights %}
+    <section class="time-goal-achievement" aria-labelledby="time-goal-achievement-heading">
+      <div class="time-goal-achievement-heading">
+        <div>
+          <h4 id="time-goal-achievement-heading">目標達成</h4>
+          <p class="hint">現在の目標ではなく、各日に設定されていた当時の目標値で判定します。</p>
+        </div>
+      </div>
+      {% if time_goal_achievement_insights.has_goals %}
+      <div class="time-goal-achievement-metrics" aria-label="直近7日の時間目標達成概要">
+        <div class="time-goal-achievement-metric">
+          <span>目標設定日</span>
+          <strong>{{ time_goal_achievement_insights.configured_days }}/7日</strong>
+        </div>
+        <div class="time-goal-achievement-metric">
+          <span>達成日</span>
+          <strong>{{ time_goal_achievement_insights.achieved_days }}日</strong>
+        </div>
+        <div class="time-goal-achievement-metric">
+          <span>達成率</span>
+          <strong>{{ time_goal_achievement_insights.achievement_rate }}%</strong>
+        </div>
+        <div class="time-goal-achievement-metric">
+          <span>達成連続</span>
+          <strong>{{ time_goal_achievement_insights.streak_days }}日</strong>
+        </div>
+      </div>
+      {% else %}
+      <p class="time-goal-achievement-empty">直近7日は時間目標が設定されていません。目標を設定すると、実績との比較と達成ストリークを確認できます。</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
     {% if time_insights.has_activity %}
     <div class="time-insights-summary" aria-label="時間記録の比較とカテゴリ概要">
       <span>
@@ -139,8 +172,9 @@
       {% endif %}
     </div>
 
-    <ul class="time-insights-days" aria-label="直近7日の日別記録時間">
+    <ul class="time-insights-days" aria-label="直近7日の日別記録時間と目標達成状況">
       {% for day in time_insights.days %}
+      {% set goal_day = time_goal_achievement_insights.days[loop.index0] if time_goal_achievement_insights else none %}
       <li class="time-insights-day {% if day.is_today %}is-today{% endif %}">
         <span class="time-insights-day-label">
           {{ day.target_date.strftime('%m/%d') }}（{{ day.weekday }}）{% if day.is_today %} 今日{% endif %}
@@ -151,6 +185,13 @@
           aria-label="{{ day.target_date.isoformat() }}の記録時間 {{ day.minutes }}分"
         >{{ day.percentage }}%</progress>
         <strong>{{ day.minutes }}分</strong>
+        {% if goal_day and goal_day.configured %}
+        <span class="time-goal-day-result {% if goal_day.achieved %}is-achieved{% else %}is-pending{% endif %}">
+          実績 {{ goal_day.minutes }}分 / 目標 {{ goal_day.goal_minutes }}分・{% if goal_day.achieved %}達成{% else %}未達成{% endif %}
+        </span>
+        {% else %}
+        <span class="time-goal-day-result is-unset">目標なし</span>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>
