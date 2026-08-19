@@ -25,7 +25,8 @@ from app.backup_validate import (
     load_backup_file,
     validate_backup_payload,
 )
-from app.migrations import migrate_habit_schema
+from app.migrations import migrate_home_panel_schema
+from app.time_goal_migration import migrate_daily_time_goal_periods
 
 DEFAULT_BACKUP_DIRECTORY = Path.home() / "HomePanelBackups"
 DEFAULT_KEEP_COUNT = 30
@@ -189,7 +190,8 @@ def validate_database_for_backup(engine: Engine) -> None:
             + ", ".join(sorted(missing_base_tables))
         )
 
-    migrate_habit_schema(engine)
+    migrate_home_panel_schema(engine)
+    migrate_daily_time_goal_periods(engine)
     missing_tables = REQUIRED_TABLES - set(inspect(engine).get_table_names())
     if missing_tables:
         raise BackupRotationInputError(
