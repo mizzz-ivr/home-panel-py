@@ -5,6 +5,10 @@ from datetime import date, timedelta
 from typing import Mapping, Sequence
 
 from app.models.time_goal import DailyTimeGoalPeriod
+from app.time_goal_constants import (
+    MAX_DAILY_TIME_GOAL_MINUTES,
+    MIN_DAILY_TIME_GOAL_MINUTES,
+)
 
 CURRENT_PERIOD_DAYS = 7
 
@@ -50,7 +54,17 @@ def _goal_minutes_for_date(
     ]
     if len(matches) != 1:
         return None
-    return matches[0].goal_minutes
+
+    goal_minutes = matches[0].goal_minutes
+    if (
+        isinstance(goal_minutes, bool)
+        or not isinstance(goal_minutes, int)
+        or not MIN_DAILY_TIME_GOAL_MINUTES
+        <= goal_minutes
+        <= MAX_DAILY_TIME_GOAL_MINUTES
+    ):
+        return None
+    return goal_minutes
 
 
 def _continuous_goal_coverage_start(
