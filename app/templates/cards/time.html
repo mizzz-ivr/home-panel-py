@@ -171,7 +171,9 @@
       <span>最多カテゴリ <strong>{{ time_insights.top_category }} {{ time_insights.top_category_minutes }}分</strong></span>
       {% endif %}
     </div>
+    {% endif %}
 
+    {% if time_insights.has_activity or (time_goal_achievement_insights and time_goal_achievement_insights.has_goals) %}
     <ul class="time-insights-days" aria-label="直近7日の日別記録時間と目標達成状況">
       {% for day in time_insights.days %}
       {% set goal_day = time_goal_achievement_insights.days[loop.index0] if time_goal_achievement_insights else none %}
