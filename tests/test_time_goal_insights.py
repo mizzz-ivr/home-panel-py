@@ -189,6 +189,22 @@ def test_overlapping_goal_periods_fail_closed_for_affected_dates():
     assert insights.days[-1].achieved is False
 
 
+def test_out_of_range_goal_value_fails_closed_without_division_error():
+    today = date(2026, 8, 17)
+    periods = (period(0, date(2026, 8, 11), None),)
+
+    insights = build_time_goal_achievement_insights(
+        today=today,
+        periods=periods,
+        daily_totals={today: 120},
+    )
+
+    assert insights.has_goals is False
+    assert insights.achievement_rate is None
+    assert insights.streak_days == 0
+    assert insights.days[-1].configured is False
+
+
 def test_dashboard_shows_goal_achievement_metrics_and_daily_results(client: TestClient):
     today = date.today()
     with client.app.state.time_goal_insights_session_factory() as db:
