@@ -123,8 +123,11 @@ def calculate_goal_achievement_streak(
     today: date,
 ) -> int:
     today_goal = _goal_minutes_for_date(periods, today)
+    if today_goal is None:
+        return 0
+
     today_minutes = max(int(daily_totals.get(today, 0)), 0)
-    if today_goal is not None and today_minutes >= today_goal:
+    if today_minutes >= today_goal:
         cursor = today
     elif today > date.min:
         cursor = today - timedelta(days=1)
