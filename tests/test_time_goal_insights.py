@@ -145,6 +145,17 @@ def test_streak_includes_today_after_goal_is_achieved():
     assert calculate_goal_achievement_streak(periods, daily_totals, today) == 3
 
 
+def test_streak_is_zero_when_today_has_no_goal():
+    today = date(2026, 8, 17)
+    periods = (period(60, date(2026, 8, 10), today - timedelta(days=1)),)
+    daily_totals = {
+        today - timedelta(days=1): 60,
+        today - timedelta(days=2): 90,
+    }
+
+    assert calculate_goal_achievement_streak(periods, daily_totals, today) == 0
+
+
 def test_unconfigured_day_breaks_goal_achievement_streak():
     today = date(2026, 8, 17)
     periods = (
@@ -187,6 +198,7 @@ def test_overlapping_goal_periods_fail_closed_for_affected_dates():
 
     assert insights.days[-1].configured is False
     assert insights.days[-1].achieved is False
+    assert insights.streak_days == 0
 
 
 def test_out_of_range_goal_value_fails_closed_without_division_error():
@@ -242,6 +254,22 @@ def test_dashboard_shows_goal_achievement_metrics_and_daily_results(client: Test
     assert "4日" in response.text
     assert "実績 60分 / 目標 120分・未達成" in response.text
     assert "当時の目標値で判定" in response.text
+
+
+def test_dashboard_shows_missed_goal_days_without_time_entries(client: TestClient):
+    today = date.today()
+    with client.app.state.time_goal_insights_session_factory() as db:
+        save_daily_time_goal(db, 60, effective_on=today - timedelta(days=2))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "目標設定日" in response.text
+    assert "3/7日" in response.text
+    assert "達成率" in response.text
+    assert "0%" in response.text
+    assert "実績 0分 / 目標 60分・未達成" in response.text
+    assert "直近7日にはまだ時間記録がありません。" not in response.text
 
 
 def test_dashboard_explains_when_recent_period_has_no_goals(client: TestClient):
