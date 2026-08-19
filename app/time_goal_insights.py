@@ -103,18 +103,9 @@ def achievement_query_start(
     today: date,
 ) -> date | None:
     """現在ストリーク候補を正確に判定するために必要な最古日を返す。"""
-    candidates: list[date] = []
-    today_start = _continuous_goal_coverage_start(periods, today)
-    if today_start is not None:
-        candidates.append(today_start)
-    if today > date.min:
-        yesterday_start = _continuous_goal_coverage_start(
-            periods,
-            today - timedelta(days=1),
-        )
-        if yesterday_start is not None:
-            candidates.append(yesterday_start)
-    return min(candidates) if candidates else None
+    if _goal_minutes_for_date(periods, today) is None:
+        return None
+    return _continuous_goal_coverage_start(periods, today)
 
 
 def calculate_goal_achievement_streak(
