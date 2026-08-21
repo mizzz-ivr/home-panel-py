@@ -33,8 +33,13 @@ from app.search_routes import router as search_router
 from app.time_goal import (
     build_daily_time_goal_status,
     clear_daily_time_goal,
+    list_daily_time_goal_periods_up_to,
     load_daily_time_goal,
     save_daily_time_goal,
+)
+from app.time_goal_insights import (
+    achievement_query_start,
+    build_time_goal_achievement_insights,
 )
 from app.time_insights import build_time_insights
 
@@ -90,23 +95,37 @@ def render_dashboard(
     )
     dashboard_preferences = get_dashboard_preferences(db)
     time_insights = None
+    time_goal_achievement_insights = None
     if (
         "time" not in dashboard_preferences.hidden
         or request.query_params.get("show_card") == "time"
     ):
         comparison_start = today - timedelta(days=13)
         period_start = today - timedelta(days=6)
+        goal_periods = list_daily_time_goal_periods_up_to(db, today)
+        streak_query_start = achievement_query_start(goal_periods, today)
+        daily_totals_start = (
+            min(comparison_start, streak_query_start)
+            if streak_query_start is not None
+            else comparison_start
+        )
+        daily_totals = dict(
+            time_entry_crud.get_daily_totals_between(db, daily_totals_start, today)
+        )
         time_insights = build_time_insights(
             today=today,
-            daily_totals=dict(
-                time_entry_crud.get_daily_totals_between(db, comparison_start, today)
-            ),
+            daily_totals=daily_totals,
             recorded_dates=time_entry_crud.list_recorded_dates_up_to(db, today),
             category_totals=time_entry_crud.get_category_totals_between(
                 db,
                 period_start,
                 today,
             ),
+        )
+        time_goal_achievement_insights = build_time_goal_achievement_insights(
+            today=today,
+            periods=goal_periods,
+            daily_totals=daily_totals,
         )
     habit_items, habit_completed_today, habit_total = habit_crud.get_dashboard_summary(db, today)
     dashboard_preferences_payload = dashboard_preferences.to_dict()
@@ -125,6 +144,7 @@ def render_dashboard(
             "time_entry_categories": TIME_ENTRY_CATEGORIES,
             "daily_time_goal_status": daily_time_goal_status,
             "time_insights": time_insights,
+            "time_goal_achievement_insights": time_goal_achievement_insights,
             "habit_items": habit_items,
             "habit_completed_today": habit_completed_today,
             "habit_total": habit_total,

@@ -170,6 +170,19 @@ def list_daily_time_goal_periods(
     )
 
 
+def list_daily_time_goal_periods_up_to(
+    db: Session,
+    target_date: date,
+) -> list[DailyTimeGoalPeriod]:
+    return list(
+        db.scalars(
+            select(DailyTimeGoalPeriod)
+            .where(DailyTimeGoalPeriod.started_on <= target_date)
+            .order_by(DailyTimeGoalPeriod.started_on.asc(), DailyTimeGoalPeriod.id.asc())
+        ).all()
+    )
+
+
 def build_daily_time_goal_status(
     goal_minutes: int | None,
     total_minutes: int,
